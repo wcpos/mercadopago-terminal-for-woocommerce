@@ -77,6 +77,22 @@ class PaymentReconcilerTest extends TestCase {
 		);
 	}
 
+	/** @dataProvider missing_payment_field_provider */
+	public function test_processed_order_without_amount_or_payment_id_never_completes( string $field, string $error ): void {
+		$mp_order = $this->fixture( 'order-processed' );
+		unset( $mp_order['transactions']['payments'][0][ $field ] );
+		$this->assertSame( array( 'status' => 'verification_failed', 'payment_status' => 'processed', 'errors' => array( $error ) ), $this->reconciler->reconcile( $this->order, $mp_order, 'webhook' ) );
+		$this->assertSame( 0, $this->order->payment_complete_calls );
+		$this->assertFalse( $this->order->is_paid() );
+	}
+
+	public static function missing_payment_field_provider(): array {
+		return array(
+			'amount' => array( 'amount', 'payment amount missing' ),
+			'id' => array( 'id', 'payment id missing' ),
+		);
+	}
+
 	public function test_canceled_order_records_note_and_allows_retry(): void {
 		$this->assertSame( array( 'status' => 'canceled', 'status_detail' => 'canceled', 'retry_allowed' => true ), $this->reconciler->reconcile( $this->order, $this->fixture( 'order-canceled' ), 'cancel' ) );
 		$this->assertSame( array( 'Mercado Pago Point order canceled via cancel (canceled).' ), $this->order->notes );

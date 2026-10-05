@@ -70,6 +70,10 @@ class PaymentReconciler {
 		if ( null === $attempt ) { $errors[] = 'order is not known for this order'; }
 		if ( isset( $mp_order['type'] ) && 'point' !== $mp_order['type'] ) { $errors[] = 'order type is not point'; }
 		if ( isset( $mp_order['transactions']['payments'][0]['amount'] ) && ! Money::equals( $mp_order['transactions']['payments'][0]['amount'], $order->get_total() ) ) { $errors[] = 'amount mismatch'; }
+		if ( 'processed' === PaymentAttempt::status( $mp_order ) ) {
+			if ( ! isset( $mp_order['transactions']['payments'][0]['amount'] ) || '' === $mp_order['transactions']['payments'][0]['amount'] ) { $errors[] = 'payment amount missing'; }
+			if ( ! isset( $mp_order['transactions']['payments'][0]['id'] ) || '' === $mp_order['transactions']['payments'][0]['id'] ) { $errors[] = 'payment id missing'; }
+		}
 		if ( isset( $mp_order['config']['point']['terminal_id'] ) && ! empty( $attempt['terminal_id'] ) && $mp_order['config']['point']['terminal_id'] !== $attempt['terminal_id'] ) { $errors[] = 'terminal mismatch'; }
 		return array( 'valid' => empty( $errors ), 'errors' => $errors );
 	}
