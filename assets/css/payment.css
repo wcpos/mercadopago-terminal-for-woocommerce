@@ -1,0 +1,338 @@
+/*
+ * Payment panel styles.
+ *
+ * This panel renders inside the WooCommerce order-pay page, where theme,
+ * WooCommerce, and POS-template CSS all apply — including high-specificity
+ * rules like `.woocommerce-page #payment .button { … !important }`. Every
+ * selector is therefore anchored on the container id (beating class-based
+ * theme selectors) and every visual property a theme commonly stomps is set
+ * explicitly with !important. Keep it that way when editing: a property left
+ * to inheritance here is a property the theme decides.
+ */
+
+#mptfwc-payment-interface#mptfwc-payment-interface,
+#mptfwc-payment-interface#mptfwc-payment-interface * {
+	box-sizing: border-box !important;
+	text-shadow: none !important;
+	font-style: normal !important;
+	text-decoration: none !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface {
+	display: block !important;
+	border: 1px solid #d6d8dc !important;
+	border-radius: 10px !important;
+	margin: 1rem 0 !important;
+	padding: 0 !important;
+	overflow: hidden !important;
+	background: #fff !important;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+	font-size: 14px !important;
+	line-height: 1.45 !important;
+	color: #0f172a !important;
+	text-align: left !important;
+	float: none !important;
+	width: auto !important;
+	max-width: none !important;
+	box-shadow: none !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-payment-card {
+	padding: 1rem !important;
+	margin: 0 !important;
+	background: #f8fafc !important;
+	border: 0 !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-payment-card h4,
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-logging-header h4 {
+	margin: 0 !important;
+	padding: 0 !important;
+	font-size: 15px !important;
+	font-weight: 700 !important;
+	line-height: 1.3 !important;
+	color: #0f172a !important;
+	text-transform: none !important;
+	letter-spacing: normal !important;
+	border: 0 !important;
+	background: none !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-payment-help {
+	margin: .35rem 0 0 !important;
+	padding: 0 !important;
+	color: #64748b !important;
+	font-size: 13px !important;
+	font-weight: 400 !important;
+	line-height: 1.45 !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-terminal-field {
+	display: flex !important;
+	flex-direction: column !important;
+	gap: .3rem !important;
+	margin: .875rem 0 0 !important;
+	padding: 0 !important;
+	border: 0 !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-terminal-label {
+	display: block !important;
+	margin: 0 !important;
+	padding: 0 !important;
+	font-weight: 600 !important;
+	font-size: 13px !important;
+	line-height: 1.3 !important;
+	color: #334155 !important;
+	text-transform: none !important;
+	letter-spacing: normal !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-terminal-select {
+	display: block !important;
+	width: 100% !important;
+	max-width: 100% !important;
+	min-height: 0 !important;
+	margin: 0 !important;
+	padding: .5rem .6rem !important;
+	border: 1px solid #cbd5e1 !important;
+	border-radius: 8px !important;
+	background: #fff !important;
+	background-image: none !important;
+	color: #0f172a !important;
+	font-family: inherit !important;
+	font-size: 14px !important;
+	font-weight: 400 !important;
+	line-height: 1.4 !important;
+	text-transform: none !important;
+	box-shadow: none !important;
+	-webkit-appearance: menulist !important;
+	-moz-appearance: menulist !important;
+	appearance: auto !important;
+	cursor: pointer !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-terminal-select:focus {
+	outline: 2px solid #93c5fd !important;
+	outline-offset: 1px !important;
+	border-color: #2563eb !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-terminal-select[aria-busy="true"],
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-terminal-select:disabled {
+	opacity: .65 !important;
+	background: #f1f5f9 !important;
+	cursor: default !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-payment-actions {
+	display: flex !important;
+	flex-wrap: wrap !important;
+	gap: .5rem !important;
+	margin: .875rem 0 0 !important;
+	padding: 0 !important;
+}
+
+/* A single primary button toggles between Start and Cancel (data-mptfwc-mode).
+   Styled explicitly so no theme button rule survives. */
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-payment-actions .button {
+	display: inline-block !important;
+	float: none !important;
+	width: auto !important;
+	min-height: 0 !important;
+	height: auto !important;
+	margin: 0 !important;
+	padding: .6rem .9rem !important;
+	border: 1px solid #cbd5e1 !important;
+	border-radius: 8px !important;
+	background: #fff !important;
+	background-image: none !important;
+	color: #0f172a !important;
+	font-family: inherit !important;
+	font-size: 13px !important;
+	font-weight: 600 !important;
+	line-height: 1.2 !important;
+	text-transform: none !important;
+	text-decoration: none !important;
+	letter-spacing: normal !important;
+	box-shadow: none !important;
+	cursor: pointer !important;
+	transition: background-color .15s ease, opacity .15s ease !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-payment-actions .button:hover:not(:disabled) {
+	background: #f1f5f9 !important;
+	color: #0f172a !important;
+	border-color: #cbd5e1 !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-payment-actions .mptfwc-primary-action {
+	flex: 1 1 auto !important;
+	background: #1d4ed8 !important;
+	border-color: #1d4ed8 !important;
+	color: #fff !important;
+	font-size: 14px !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-payment-actions .mptfwc-primary-action:hover:not(:disabled) {
+	background: #1e40af !important;
+	border-color: #1e40af !important;
+	color: #fff !important;
+}
+
+/* Cancel mode: the same button reskinned so it reads as a stop action, not a
+   call to action, while a payment is in flight. */
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-payment-actions .mptfwc-primary-action[data-mptfwc-mode="cancel"] {
+	background: #fff !important;
+	border-color: #dc2626 !important;
+	color: #b91c1c !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-payment-actions .mptfwc-primary-action[data-mptfwc-mode="cancel"]:hover:not(:disabled) {
+	background: #fef2f2 !important;
+	border-color: #dc2626 !important;
+	color: #b91c1c !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-payment-actions .button:disabled {
+	opacity: .55 !important;
+	cursor: not-allowed !important;
+}
+
+/* The status line is the cashier's main feedback — render it as a banner. */
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-payment-status {
+	display: block !important;
+	margin: .875rem 0 0 !important;
+	padding: .65rem .8rem !important;
+	border: 1px solid transparent !important;
+	border-radius: 8px !important;
+	background: none !important;
+	font-size: 14px !important;
+	font-weight: 600 !important;
+	line-height: 1.35 !important;
+	text-transform: none !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-payment-status:empty {
+	display: none !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-status-info { color: #1e40af !important; background: #eff6ff !important; border-color: #bfdbfe !important; }
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-status-success { color: #065f46 !important; background: #ecfdf5 !important; border-color: #a7f3d0 !important; }
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-status-error { color: #991b1b !important; background: #fef2f2 !important; border-color: #fecaca !important; }
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-status-warning { color: #92400e !important; background: #fffbeb !important; border-color: #fde68a !important; }
+
+/* Spinner while a payment is in flight (waiting on the terminal). */
+#mptfwc-payment-interface#mptfwc-payment-interface[data-mptfwc-busy="true"] .mptfwc-payment-status::before {
+	content: '' !important;
+	display: inline-block !important;
+	width: 13px !important;
+	height: 13px !important;
+	margin-right: .5rem !important;
+	border: 2px solid currentcolor !important;
+	border-top-color: transparent !important;
+	border-radius: 50% !important;
+	vertical-align: -2px !important;
+	animation: mptfwc-spin .8s linear infinite !important;
+}
+
+@keyframes mptfwc-spin {
+	to { transform: rotate(360deg); }
+}
+
+/* Logs are a support tool — keep them present but visually quiet. */
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-logging-section {
+	display: block !important;
+	margin: 0 !important;
+	padding: 0 !important;
+	background: #f8fafc !important;
+	color: #334155 !important;
+	border: 0 !important;
+	border-top: 1px solid #e2e8f0 !important;
+}
+
+/* Log tools disabled in settings: the textarea stays in the DOM (JS writes to
+   it) but the whole section is hidden so no empty bordered strip shows. */
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-logging-section.mptfwc-logging-hidden {
+	display: none !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-logging-header {
+	display: flex !important;
+	align-items: center !important;
+	justify-content: space-between !important;
+	gap: 1rem !important;
+	margin: 0 !important;
+	padding: .5rem 1rem !important;
+	background: none !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-logging-header h4 {
+	font-size: 12px !important;
+	text-transform: uppercase !important;
+	letter-spacing: .04em !important;
+	color: #64748b !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-logging-actions {
+	display: flex !important;
+	flex-wrap: wrap !important;
+	gap: .4rem !important;
+	margin: 0 !important;
+	padding: 0 !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-logging-actions .button {
+	display: inline-block !important;
+	float: none !important;
+	width: auto !important;
+	min-height: 26px !important;
+	height: auto !important;
+	margin: 0 !important;
+	padding: .25rem .6rem !important;
+	border: 1px solid #cbd5e1 !important;
+	border-radius: 6px !important;
+	background: #fff !important;
+	background-image: none !important;
+	color: #334155 !important;
+	font-family: inherit !important;
+	font-size: 12px !important;
+	font-weight: 400 !important;
+	line-height: 1.2 !important;
+	text-transform: none !important;
+	text-decoration: none !important;
+	letter-spacing: normal !important;
+	box-shadow: none !important;
+	cursor: pointer !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-logging-actions .button:hover {
+	background: #f1f5f9 !important;
+	color: #334155 !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-log-content {
+	margin: 0 !important;
+	padding: 0 1rem 1rem !important;
+	background: none !important;
+}
+
+#mptfwc-payment-interface#mptfwc-payment-interface .mptfwc-payment-log-textarea {
+	display: block !important;
+	width: 100% !important;
+	max-width: none !important;
+	min-height: 180px !important;
+	margin: 0 !important;
+	padding: .75rem !important;
+	border: 1px solid #334155 !important;
+	border-radius: 6px !important;
+	background: #020617 !important;
+	color: #d1fae5 !important;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace !important;
+	font-size: 12px !important;
+	line-height: 1.45 !important;
+	text-transform: none !important;
+	box-shadow: none !important;
+	resize: vertical !important;
+	opacity: 1 !important;
+}
