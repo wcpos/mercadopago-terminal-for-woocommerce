@@ -438,7 +438,7 @@ class Gateway extends WC_Payment_Gateway {
 			return array( 'result' => 'failure' );
 		}
 		if ( ! $order->is_paid() ) {
-			if ( ! ( function_exists( 'is_checkout_pay_page' ) && is_checkout_pay_page() ) ) {
+			if ( $this->is_storefront_checkout() ) {
 				return array( 'result' => 'success', 'redirect' => $order->get_checkout_payment_url( true ) );
 			}
 			try {
@@ -460,5 +460,12 @@ class Gateway extends WC_Payment_Gateway {
 		}
 		wc_add_notice( __( 'This order has not been paid yet. Start the payment above and wait for Mercado Pago to confirm — the order finishes on its own. If the customer has already paid, give it a few seconds and try again.', 'mercadopago-terminal-for-woocommerce' ), 'notice' );
 		return array( 'result' => 'failure' );
+	}
+
+	private function is_storefront_checkout(): bool {
+		return ! ( function_exists( 'woocommerce_pos_request' ) && woocommerce_pos_request() )
+			&& ! ( function_exists( 'is_checkout_pay_page' ) && is_checkout_pay_page() )
+			&& ( ! isset( $GLOBALS['wp'] ) || empty( $GLOBALS['wp']->query_vars['order-pay'] ) )
+			&& ! array_key_exists( 'woocommerce_pay', $_POST );
 	}
 }

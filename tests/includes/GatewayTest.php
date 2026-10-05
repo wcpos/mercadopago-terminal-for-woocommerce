@@ -5,6 +5,16 @@ use WCPOS\WooCommercePOS\MercadoPagoTerminal\Gateway;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\PaymentAttempt;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\Settings;
 
+if ( ! function_exists( 'woocommerce_pos_request' ) ) {
+	function woocommerce_pos_request( ?bool $value = null ): bool {
+		static $is_pos = false;
+		if ( null !== $value ) {
+			$is_pos = $value;
+		}
+		return $is_pos;
+	}
+}
+
 class GatewayTest extends TestCase {
 	private $order;
 
@@ -20,6 +30,7 @@ class GatewayTest extends TestCase {
 	protected function tearDown(): void {
 		$_GET = array();
 		$_POST = array();
+		woocommerce_pos_request( false );
 		unset( $GLOBALS['mptfwc_orders'], $GLOBALS['wp'] );
 		WP_Stub::reset();
 	}
@@ -312,9 +323,56 @@ class GatewayTest extends TestCase {
 	}
 
 	public function test_storefront_redirects_unpaid_order_to_order_pay(): void {
+		$GLOBALS['wp']->query_vars = array();
 		$this->assertSame( array( 'result' => 'success', 'redirect' => '/checkout/order-pay/123/?key=key' ), ( new Gateway() )->process_payment( 123 ) );
 		$this->assertSame( array(), WP_Stub::$notices );
 		$this->assertSame( array(), WP_Stub::$http_requests );
+		$this->assertFalse( $this->order->is_paid() );
+	}
+
+	public function test_pos_unpaid_order_polls_and_notices(): void {
+		$GLOBALS['wp']->query_vars = array();
+		woocommerce_pos_request( true );
+		WP_Stub::$options[ 'woocommerce_' . Settings::GATEWAY_ID . '_settings' ] = array( 'access_token' => 'TEST-token' );
+		$pending = PaymentAttempt::prepare( $this->order, 'T1', '24.00' );
+		$remote = array( 'id' => 'ORD1', 'status' => 'created', 'external_reference' => $pending['external_reference'] );
+		PaymentAttempt::record_created( $this->order, $pending, $remote );
+		$remote['status'] = 'at_terminal';
+		WP_Stub::$http_responses[] = array( 'response' => array( 'code' => 200 ), 'body' => json_encode( $remote ) );
+		$this->assertSame( array( 'result' => 'failure' ), ( new Gateway() )->process_payment( 123 ) );
+		$this->assertCount( 1, WP_Stub::$http_requests );
+		$this->assertCount( 1, WP_Stub::$notices );
+		$this->assertSame( 'notice', WP_Stub::$notices[0]['type'] );
+		$this->assertFalse( $this->order->is_paid() );
+	}
+
+	public function test_order_pay_post_unpaid_order_polls_and_notices(): void {
+		$GLOBALS['wp']->query_vars = array();
+		$_POST['woocommerce_pay'] = '1';
+		WP_Stub::$options[ 'woocommerce_' . Settings::GATEWAY_ID . '_settings' ] = array( 'access_token' => 'TEST-token' );
+		$pending = PaymentAttempt::prepare( $this->order, 'T1', '24.00' );
+		$remote = array( 'id' => 'ORD1', 'status' => 'created', 'external_reference' => $pending['external_reference'] );
+		PaymentAttempt::record_created( $this->order, $pending, $remote );
+		$remote['status'] = 'at_terminal';
+		WP_Stub::$http_responses[] = array( 'response' => array( 'code' => 200 ), 'body' => json_encode( $remote ) );
+		$this->assertSame( array( 'result' => 'failure' ), ( new Gateway() )->process_payment( 123 ) );
+		$this->assertCount( 1, WP_Stub::$http_requests );
+		$this->assertCount( 1, WP_Stub::$notices );
+		$this->assertSame( 'notice', WP_Stub::$notices[0]['type'] );
+		$this->assertFalse( $this->order->is_paid() );
+	}
+
+	public function test_order_pay_query_var_unpaid_order_polls_and_notices(): void {
+		WP_Stub::$options[ 'woocommerce_' . Settings::GATEWAY_ID . '_settings' ] = array( 'access_token' => 'TEST-token' );
+		$pending = PaymentAttempt::prepare( $this->order, 'T1', '24.00' );
+		$remote = array( 'id' => 'ORD1', 'status' => 'created', 'external_reference' => $pending['external_reference'] );
+		PaymentAttempt::record_created( $this->order, $pending, $remote );
+		$remote['status'] = 'at_terminal';
+		WP_Stub::$http_responses[] = array( 'response' => array( 'code' => 200 ), 'body' => json_encode( $remote ) );
+		$this->assertSame( array( 'result' => 'failure' ), ( new Gateway() )->process_payment( 123 ) );
+		$this->assertCount( 1, WP_Stub::$http_requests );
+		$this->assertCount( 1, WP_Stub::$notices );
+		$this->assertSame( 'notice', WP_Stub::$notices[0]['type'] );
 		$this->assertFalse( $this->order->is_paid() );
 	}
 
