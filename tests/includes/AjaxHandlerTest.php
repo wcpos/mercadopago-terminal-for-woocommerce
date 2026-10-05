@@ -189,4 +189,32 @@ class AjaxHandlerTest extends TestCase {
 			$this->assertTrue( is_callable( $action['callback'] ) );
 		}
 	}
+
+	public function test_wrong_token_logs_reason_and_context_without_the_token(): void {
+		\WCPOS\WooCommercePOS\MercadoPagoTerminal\Logger::$logger = null;
+		\WCPOS\WooCommercePOS\MercadoPagoTerminal\Logger::configure( 'debug' );
+		$_POST = array( 'order_id' => 123, 'order_token' => 'wrong-secret-token' );
+		$this->assertSame( 403, $this->request( 'poll_payment' )['code'] );
+		$log = end( WP_Stub::$logs );
+		$this->assertSame( 'warning', $log['level'] );
+		$this->assertStringContainsString( 'AJAX request rejected', $log['message'] );
+		foreach ( array( '"action":"mptfwc_poll_payment"', '"reason":"unauthorized"', '"order_id":123', '"credential_submitted":true', '"logged_in":false', '"can_manage":false' ) as $context ) {
+			$this->assertStringContainsString( $context, $log['message'] );
+		}
+		$this->assertStringNotContainsString( $_POST['order_token'], json_encode( WP_Stub::$logs ) );
+	}
+
+	public function test_php_errors_return_json_500_for_each_service_handler(): void {
+		$this->authorize();
+		WP_Stub::$options[ 'woocommerce_' . Settings::GATEWAY_ID . '_settings' ] = array( 'enabled' => 'yes' );
+		WP_Stub::$caps = array( 'manage_woocommerce' => true );
+		WP_Stub::$nonce_ok = true;
+		$_POST['terminal_id'] = 'T1';
+		$this->payments->method( 'start_payment_for_order' )->willThrowException( new Error( 'Service error' ) );
+		$this->terminals->method( 'list_terminals' )->willThrowException( new Error( 'Service error' ) );
+		$this->terminals->method( 'set_pdv_mode' )->willThrowException( new Error( 'Service error' ) );
+		foreach ( array( 'start_payment', 'list_terminals', 'set_pdv_mode' ) as $action ) {
+			$this->assertSame( array( 'success' => false, 'data' => 'Service error', 'code' => 500 ), $this->request( $action ) );
+		}
+	}
 }

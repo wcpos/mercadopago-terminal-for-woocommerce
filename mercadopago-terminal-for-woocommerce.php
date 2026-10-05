@@ -53,6 +53,9 @@ function mptfwc_activate(): void {
 }
 register_activation_hook( __FILE__, __NAMESPACE__ . '\\mptfwc_activate' );
 
+function mptfwc_deactivate(): void { PaymentSweeper::unschedule(); }
+register_deactivation_hook( __FILE__, __NAMESPACE__ . '\\mptfwc_deactivate' );
+
 function load_textdomain(): void {
 	load_plugin_textdomain( 'mercadopago-terminal-for-woocommerce', false, dirname( plugin_basename( MPTFWC_PLUGIN_FILE ) ) . '/languages' );
 }
@@ -64,6 +67,7 @@ function init(): void {
 	add_action( 'woocommerce_create_refund', array( RefundHandler::class, 'remember_refund' ), 10, 2 );
 	new AjaxHandler();
 	new WebhookHandler();
+	new PaymentSweeper();
 	( new SupportBundle() )->register();
 	do_action( 'mptfwc_init' );
 }

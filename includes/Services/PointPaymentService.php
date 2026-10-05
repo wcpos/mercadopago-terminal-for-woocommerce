@@ -64,7 +64,13 @@ class PointPaymentService {
 			return array( 'status' => 'idle' );
 		}
 		if ( PaymentAttempt::is_non_final( $current['status'] ) ) {
-			$remote = $this->client->get_order( $current['mp_order_id'] );
+			try {
+				$remote = $this->client->get_order( $current['mp_order_id'] );
+			} catch ( MercadoPagoApiException $e ) {
+				if ( 404 !== $e->http_status() || time() - strtotime( $current['created_at'] ) >= 60 ) { throw $e; }
+				Logger::log( 'Order not visible yet', array( 'order_id' => $order->get_id(), 'mp_order_id' => $current['mp_order_id'] ), 'debug' );
+				return array( 'status' => 'created', 'retry_allowed' => false, 'message' => __( 'Waiting for Mercado Pago to register the payment…', 'mercadopago-terminal-for-woocommerce' ) );
+			}
 			$result = $this->reconciler->reconcile( $order, $remote, 'poll' );
 		} else {
 			$result = array( 'status' => $current['status'] );

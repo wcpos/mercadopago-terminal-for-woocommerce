@@ -19,6 +19,8 @@ class WP_Stub {
 	public static $scripts = array();
 	public static $checkout_pay_page = false;
 	public static $notices = array();
+	public static $cron = array();
+	public static $logged_in = false;
 
 	public static function reset(): void {
 		self::$options = array();
@@ -39,10 +41,19 @@ class WP_Stub {
 		self::$scripts = array();
 		self::$checkout_pay_page = false;
 		self::$notices = array();
+		self::$cron = array();
+		self::$logged_in = false;
+		unset( $GLOBALS['mptfwc_wc_get_orders_args'], $GLOBALS['mptfwc_wc_get_orders_callback'] );
 	}
 }
 
 if ( ! defined( 'MINUTE_IN_SECONDS' ) ) { define( 'MINUTE_IN_SECONDS', 60 ); }
+if ( ! defined( 'DAY_IN_SECONDS' ) ) { define( 'DAY_IN_SECONDS', 86400 ); }
+if ( ! function_exists( 'is_user_logged_in' ) ) { function is_user_logged_in() { return WP_Stub::$logged_in; } }
+if ( ! function_exists( 'wp_next_scheduled' ) ) { function wp_next_scheduled( $hook ) { return empty( WP_Stub::$cron[ $hook ] ) ? false : min( array_keys( WP_Stub::$cron[ $hook ] ) ); } }
+if ( ! function_exists( 'wp_schedule_event' ) ) { function wp_schedule_event( $timestamp, $schedule, $hook ) { WP_Stub::$cron[ $hook ][ $timestamp ] = $schedule; return true; } }
+if ( ! function_exists( 'wp_unschedule_event' ) ) { function wp_unschedule_event( $timestamp, $hook ) { unset( WP_Stub::$cron[ $hook ][ $timestamp ] ); return true; } }
+if ( ! function_exists( 'register_deactivation_hook' ) ) { function register_deactivation_hook( $file, $callback ) { add_action( 'deactivate_' . plugin_basename( $file ), $callback ); } }
 // Simulate exit without being caught by the handlers' service-exception catches.
 if ( ! class_exists( 'WP_Stub_Json_Exit' ) ) { class WP_Stub_Json_Exit extends Error {} }
 if ( ! function_exists( 'wp_doing_ajax' ) ) { function wp_doing_ajax() { return WP_Stub::$doing_ajax; } }

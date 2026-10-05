@@ -75,7 +75,13 @@ class MPTFWC_Test_Refund {
 }
 
 if ( ! function_exists( 'wc_get_order' ) ) { function wc_get_order( $id ) { return $GLOBALS['mptfwc_orders'][ $id ] ?? null; } }
-if ( ! function_exists( 'wc_get_orders' ) ) { function wc_get_orders( $args ) { return $GLOBALS['mptfwc_order_query_results'] ?? array(); } }
+if ( ! function_exists( 'wc_get_orders' ) ) {
+	function wc_get_orders( $args ) {
+		$GLOBALS['mptfwc_wc_get_orders_args'][] = $args;
+		if ( isset( $GLOBALS['mptfwc_wc_get_orders_callback'] ) ) { return $GLOBALS['mptfwc_wc_get_orders_callback']( $args ); }
+		return $GLOBALS['mptfwc_order_query_results'] ?? array();
+	}
+}
 
 /** The options-table queries PaymentLock runs, including atomic INSERT IGNORE. */
 class MPTFWC_Fake_Wpdb {

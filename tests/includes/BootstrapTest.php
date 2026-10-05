@@ -24,4 +24,13 @@ class BootstrapTest extends TestCase {
 		\WCPOS\WooCommercePOS\MercadoPagoTerminal\init();
 		$this->assertTrue( $called );
 	}
+
+	public function test_deactivation_hook_is_registered_and_clears_sweep(): void {
+		$callback = 'WCPOS\\WooCommercePOS\\MercadoPagoTerminal\\mptfwc_deactivate';
+		$this->assertContains( array( 'hook' => 'deactivate_' . plugin_basename( MPTFWC_PLUGIN_FILE ), 'callback' => $callback, 'priority' => 10 ), WP_Stub::$boot_actions );
+		$sweeper = new \WCPOS\WooCommercePOS\MercadoPagoTerminal\PaymentSweeper();
+		$sweeper->ensure_scheduled();
+		call_user_func( $callback );
+		$this->assertFalse( wp_next_scheduled( $sweeper::CRON_HOOK ) );
+	}
 }

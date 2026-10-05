@@ -335,4 +335,28 @@ class PointPaymentServiceTest extends TestCase {
 		$this->assertSame( array( 'status' => 'idle' ), $this->service->cancel_order_payment( $this->order ) );
 		$this->assertSame( array(), $this->client->calls );
 	}
+
+	public function test_poll_treats_a_recent_404_as_pending(): void {
+		$this->current_attempt();
+		$this->order->update_meta_data( PaymentAttempt::META_CURRENT_CREATED_AT, gmdate( 'c', time() - 10 ) );
+		$this->client->returns['get_order'] = array( new MercadoPagoApiException( 'Not found', 404 ) );
+		Logger::configure( 'debug' );
+		$this->assertSame( array( 'status' => 'created', 'retry_allowed' => false, 'message' => 'Waiting for Mercado Pago to register the payment…' ), $this->service->poll_order( $this->order ) );
+		$this->assertSame( 'debug', end( WP_Stub::$logs )['level'] );
+		$this->assertStringContainsString( 'Order not visible yet', end( WP_Stub::$logs )['message'] );
+	}
+
+	/** @dataProvider poll_error_provider */
+	public function test_poll_rethrows_older_404_and_other_errors( int $age, int $code ): void {
+		$this->current_attempt();
+		$this->order->update_meta_data( PaymentAttempt::META_CURRENT_CREATED_AT, gmdate( 'c', time() - $age ) );
+		$error = new MercadoPagoApiException( 'Fetch failed', $code );
+		$this->client->returns['get_order'] = array( $error );
+		$this->expectExceptionObject( $error );
+		$this->service->poll_order( $this->order );
+	}
+
+	public static function poll_error_provider(): array {
+		return array( array( 120, 404 ), array( 60, 404 ), array( 10, 500 ) );
+	}
 }

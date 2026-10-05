@@ -1,7 +1,6 @@
 <?php
 namespace WCPOS\WooCommercePOS\MercadoPagoTerminal;
 
-use Exception;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\Services\MercadoPagoClient;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\Services\PointPaymentService;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\Services\TerminalService;
@@ -24,7 +23,6 @@ class AjaxHandler {
 
 	public function mptfwc_start_payment(): void {
 		$this->with_order( 'start_payment', function ( $order ) {
-			$this->require_gateway_enabled();
 			$terminal_id = sanitize_text_field( wp_unslash( $_POST['terminal_id'] ?? '' ) );
 			$settings    = $this->settings();
 			if ( $settings->lock_terminal() ) {
@@ -41,19 +39,23 @@ class AjaxHandler {
 	public function mptfwc_list_terminals(): void {
 		$order_id = absint( $_POST['order_id'] ?? 0 );
 		if ( ! $order_id || ! $this->can_access_order( $order_id ) ) {
+			Logger::log( 'AJAX request rejected', array( 'action' => 'mptfwc_list_terminals', 'reason' => ( $order_id ? 'unauthorized' : 'missing_order_id' ), 'order_id' => $order_id, 'credential_submitted' => isset( $_POST['order_token'] ), 'logged_in' => is_user_logged_in(), 'can_manage' => current_user_can( 'manage_woocommerce' ) ), 'warning' );
 			wp_send_json_error( __( 'Unauthorized request.', 'mercadopago-terminal-for-woocommerce' ), 403 );
 		}
-		$this->require_gateway_enabled();
+		$this->require_gateway_enabled( 'mptfwc_list_terminals' );
+		$error = null;
 		try {
 			$settings = $this->settings();
 			$default  = $settings->default_terminal_id();
 			$items    = self::selectable_terminals( $this->terminal_service()->list_terminals(), $settings->enabled_terminal_ids() );
 			Logger::log( 'Mercado Pago Terminal list retrieved.', array( 'order_id' => $order_id, 'count' => count( $items ) ), 'info' );
-			wp_send_json_success( array( 'terminals' => $items, 'default_terminal_id' => $default, 'lock_terminal' => $settings->lock_terminal() ) );
-		} catch ( Exception $e ) {
+			$result = array( 'terminals' => $items, 'default_terminal_id' => $default, 'lock_terminal' => $settings->lock_terminal() );
+		} catch ( \Throwable $e ) {
 			Logger::log( 'Mercado Pago Terminal list failed: ' . $e->getMessage(), array( 'order_id' => $order_id ), 'error' );
-			wp_send_json_error( $e->getMessage(), 500 );
+			$error = $e;
 		}
+		if ( null !== $error ) { wp_send_json_error( $error->getMessage(), 500 ); }
+		wp_send_json_success( $result );
 	}
 
 	/** Keep the configured terminals and explain which ones need PDV mode. */
@@ -96,35 +98,49 @@ class AjaxHandler {
 	}
 
 	public function mptfwc_set_pdv_mode(): void {
-		if ( ! current_user_can( 'manage_woocommerce' ) || ! check_ajax_referer( 'mptfwc_admin_actions', 'nonce', false ) ) { wp_send_json_error( __( 'Security check failed', 'mercadopago-terminal-for-woocommerce' ), 403 ); }
+		if ( ! current_user_can( 'manage_woocommerce' ) || ! check_ajax_referer( 'mptfwc_admin_actions', 'nonce', false ) ) {
+			Logger::log( 'AJAX request rejected', array( 'action' => 'mptfwc_set_pdv_mode', 'reason' => 'security_check_failed', 'order_id' => absint( $_POST['order_id'] ?? 0 ), 'credential_submitted' => isset( $_POST['order_token'] ), 'logged_in' => is_user_logged_in(), 'can_manage' => current_user_can( 'manage_woocommerce' ) ), 'warning' );
+			wp_send_json_error( __( 'Security check failed', 'mercadopago-terminal-for-woocommerce' ), 403 );
+		}
 		$terminal_id = sanitize_text_field( wp_unslash( $_POST['terminal_id'] ?? '' ) );
-		if ( '' === $terminal_id ) { wp_send_json_error( __( 'Terminal ID is required.', 'mercadopago-terminal-for-woocommerce' ), 400 ); }
+		if ( '' === $terminal_id ) {
+			Logger::log( 'AJAX request rejected', array( 'action' => 'mptfwc_set_pdv_mode', 'reason' => 'missing_terminal_id', 'order_id' => absint( $_POST['order_id'] ?? 0 ), 'credential_submitted' => isset( $_POST['order_token'] ), 'logged_in' => is_user_logged_in(), 'can_manage' => current_user_can( 'manage_woocommerce' ) ), 'warning' );
+			wp_send_json_error( __( 'Terminal ID is required.', 'mercadopago-terminal-for-woocommerce' ), 400 );
+		}
+		$error = null;
 		try {
 			$this->terminal_service()->set_pdv_mode( $terminal_id );
 			delete_transient( 'mptfwc_terminal_choices_test' );
 			delete_transient( 'mptfwc_terminal_choices_live' );
-			wp_send_json_success( array( 'terminal_id' => $terminal_id, 'operating_mode' => 'PDV', 'message' => __( 'Switched to PDV mode. Restart the terminal to apply it.', 'mercadopago-terminal-for-woocommerce' ) ) );
-		} catch ( Exception $e ) {
+			$result = array( 'terminal_id' => $terminal_id, 'operating_mode' => 'PDV', 'message' => __( 'Switched to PDV mode. Restart the terminal to apply it.', 'mercadopago-terminal-for-woocommerce' ) );
+		} catch ( \Throwable $e ) {
 			Logger::log( 'Terminal PDV switch failed: ' . $e->getMessage(), array(), 'error' );
-			wp_send_json_error( $e->getMessage(), 500 );
+			$error = $e;
 		}
+		if ( null !== $error ) { wp_send_json_error( $error->getMessage(), 500 ); }
+		wp_send_json_success( $result );
 	}
 
 	private function with_order( string $operation, callable $callback ): void {
+		$order_id = absint( $_POST['order_id'] ?? 0 );
+		if ( ! $order_id ) {
+			Logger::log( 'AJAX request rejected', array( 'action' => 'mptfwc_' . $operation, 'reason' => 'missing_order_id', 'order_id' => $order_id, 'credential_submitted' => isset( $_POST['order_token'] ), 'logged_in' => is_user_logged_in(), 'can_manage' => current_user_can( 'manage_woocommerce' ) ), 'warning' );
+			wp_send_json_error( __( 'Order ID is required.', 'mercadopago-terminal-for-woocommerce' ), 400 );
+		}
+		if ( ! $this->can_access_order( $order_id ) ) {
+			Logger::log( 'AJAX request rejected', array( 'action' => 'mptfwc_' . $operation, 'reason' => 'unauthorized', 'order_id' => $order_id, 'credential_submitted' => isset( $_POST['order_token'] ), 'logged_in' => is_user_logged_in(), 'can_manage' => current_user_can( 'manage_woocommerce' ) ), 'warning' );
+			wp_send_json_error( __( 'Unauthorized request.', 'mercadopago-terminal-for-woocommerce' ), 403 );
+		}
+		Logger::log( 'Mercado Pago Terminal AJAX request received.', array( 'operation' => $operation, 'order_id' => $order_id ), 'info' );
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			Logger::log( 'Mercado Pago Terminal AJAX request used invalid order.', array( 'operation' => $operation, 'order_id' => $order_id ), 'error' );
+			Logger::log( 'AJAX request rejected', array( 'action' => 'mptfwc_' . $operation, 'reason' => 'invalid_order', 'order_id' => $order_id, 'credential_submitted' => isset( $_POST['order_token'] ), 'logged_in' => is_user_logged_in(), 'can_manage' => current_user_can( 'manage_woocommerce' ) ), 'warning' );
+			wp_send_json_error( __( 'Invalid order.', 'mercadopago-terminal-for-woocommerce' ), 404 );
+		}
+		if ( 'start_payment' === $operation ) { $this->require_gateway_enabled( 'mptfwc_' . $operation ); }
+		$error = null;
 		try {
-			$order_id = absint( $_POST['order_id'] ?? 0 );
-			if ( ! $order_id ) {
-				wp_send_json_error( __( 'Order ID is required.', 'mercadopago-terminal-for-woocommerce' ), 400 );
-			}
-			if ( ! $this->can_access_order( $order_id ) ) {
-				wp_send_json_error( __( 'Unauthorized request.', 'mercadopago-terminal-for-woocommerce' ), 403 );
-			}
-			Logger::log( 'Mercado Pago Terminal AJAX request received.', array( 'operation' => $operation, 'order_id' => $order_id ), 'info' );
-			$order = wc_get_order( $order_id );
-			if ( ! $order ) {
-				Logger::log( 'Mercado Pago Terminal AJAX request used invalid order.', array( 'operation' => $operation, 'order_id' => $order_id ), 'error' );
-				wp_send_json_error( __( 'Invalid order.', 'mercadopago-terminal-for-woocommerce' ), 404 );
-			}
 			$result = $callback( $order );
 			if ( is_array( $result ) ) {
 				// The order is already reconciled and paid, so re-submitting the
@@ -133,11 +149,12 @@ class AjaxHandler {
 				$result = self::with_paid_redirect( $result, $order );
 			}
 			Logger::log( 'Mercado Pago Terminal AJAX request completed.', array( 'operation' => $operation, 'order_id' => $order_id, 'status' => is_array( $result ) ? ( $result['status'] ?? '' ) : '' ), 'success' );
-			wp_send_json_success( $result );
-		} catch ( Exception $e ) {
+		} catch ( \Throwable $e ) {
 			Logger::log( 'Mercado Pago Terminal AJAX failed: ' . $e->getMessage(), array( 'operation' => $operation ), 'error' );
-			wp_send_json_error( $e->getMessage(), 500 );
+			$error = $e;
 		}
+		if ( null !== $error ) { wp_send_json_error( $error->getMessage(), 500 ); }
+		wp_send_json_success( $result );
 	}
 
 	private function can_access_order( int $order_id ): bool {
@@ -158,8 +175,9 @@ class AjaxHandler {
 	 * payment already in flight must still settle, and the cashier must keep
 	 * the ability to cancel it, even if the gateway was switched off meanwhile.
 	 */
-	private function require_gateway_enabled(): void {
+	private function require_gateway_enabled( string $action ): void {
 		if ( ! $this->settings()->active() ) {
+			Logger::log( 'AJAX request rejected', array( 'action' => $action, 'reason' => 'gateway_disabled', 'order_id' => absint( $_POST['order_id'] ?? 0 ), 'credential_submitted' => isset( $_POST['order_token'] ), 'logged_in' => is_user_logged_in(), 'can_manage' => current_user_can( 'manage_woocommerce' ) ), 'warning' );
 			wp_send_json_error( __( 'Mercado Pago Terminal is disabled.', 'mercadopago-terminal-for-woocommerce' ), 403 );
 		}
 	}
