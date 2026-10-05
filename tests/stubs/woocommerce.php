@@ -20,6 +20,7 @@ class MPTFWC_Test_Order {
 	public int $id;
 	public array $meta = array();
 	public array $notes = array();
+	public array $refunds = array();
 	public bool $paid = false;
 	public string $transaction_id = '';
 	public int $payment_complete_calls = 0;
@@ -40,6 +41,7 @@ class MPTFWC_Test_Order {
 	public function save() { $this->save_calls++; }
 	public function is_paid() { return $this->paid; }
 	public function get_transaction_id() { return $this->transaction_id; }
+	public function get_refunds() { return $this->refunds; }
 	public function set_transaction_id( $id ) { $this->transaction_id = $id; }
 	public function get_total() { return $this->total; }
 	public function get_currency() { return $this->currency; }
@@ -52,6 +54,22 @@ class MPTFWC_Test_Order {
 		$this->paid = true;
 		if ( $id ) { $this->transaction_id = $id; }
 	}
+}
+
+class MPTFWC_Test_Refund {
+	public int $id;
+	public $amount;
+	public int $parent_id;
+	public array $meta = array();
+	public int $save_calls = 0;
+
+	public function __construct( $id, $amount, $parent_id = 123 ) { $this->id = $id; $this->amount = $amount; $this->parent_id = $parent_id; }
+	public function get_id() { return $this->id; }
+	public function get_amount() { return $this->amount; }
+	public function get_parent_id() { return $this->parent_id; }
+	public function get_meta( $key, $single = true ) { return $this->meta[ $key ] ?? ( $single ? '' : array() ); }
+	public function update_meta_data( $key, $value ) { $this->meta[ $key ] = $value; }
+	public function save() { $this->save_calls++; }
 }
 
 if ( ! function_exists( 'wc_get_order' ) ) { function wc_get_order( $id ) { return $GLOBALS['mptfwc_orders'][ $id ] ?? null; } }

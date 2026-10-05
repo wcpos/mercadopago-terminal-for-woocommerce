@@ -141,11 +141,14 @@ if ( ! function_exists( 'add_query_arg' ) ) {
 if ( ! function_exists( 'wp_json_encode' ) ) { function wp_json_encode( $data ) { return json_encode( $data ); } }
 if ( ! class_exists( 'WP_Error' ) ) {
 	class WP_Error {
+		private $code;
 		private $message;
-		public function __construct( $code = '', $message = '' ) { $this->message = $message; }
+		public function __construct( $code = '', $message = '' ) { $this->code = $code; $this->message = $message; }
+		public function get_error_code() { return $this->code; }
 		public function get_error_message() { return $this->message; }
 	}
 }
+if ( ! function_exists( 'wc_format_decimal' ) ) { function wc_format_decimal( $number, $dp = false ) { return number_format( (float) $number, false === $dp ? 2 : $dp, '.', '' ); } }
 if ( ! function_exists( 'is_wp_error' ) ) { function is_wp_error( $value ) { return $value instanceof WP_Error; } }
 if ( ! function_exists( 'wp_remote_request' ) ) {
 	function wp_remote_request( $url, $args ) {

@@ -11,7 +11,7 @@ class Gateway extends WC_Payment_Gateway {
 		$this->id = Settings::GATEWAY_ID;
 		$this->method_title = __( 'Mercado Pago Terminal', 'mercadopago-terminal-for-woocommerce' );
 		$this->method_description = __( 'Accept in-person payments using Mercado Pago Terminal.', 'mercadopago-terminal-for-woocommerce' );
-		$this->supports = array( 'products' );
+		$this->supports = array( 'products', 'refunds' );
 		$this->init_settings();
 		$this->init_form_fields();
 		$this->title = $this->get_option( 'title', __( 'Mercado Pago Terminal', 'mercadopago-terminal-for-woocommerce' ) );
@@ -23,6 +23,8 @@ class Gateway extends WC_Payment_Gateway {
 	}
 
 	public static function register_gateway( array $methods ): array { $methods[] = __CLASS__; return $methods; }
+
+	public function process_refund( $order_id, $amount = null, $reason = '' ) { $order = wc_get_order( $order_id ); if ( ! $order ) { return new \WP_Error( 'mptfwc_invalid_order', __( 'Invalid order.', 'mercadopago-terminal-for-woocommerce' ) ); } return ( new RefundHandler( new MercadoPagoClient( ( new Settings() )->access_token() ) ) )->process_refund( $order, $amount, $reason ); }
 
 	public function init_form_fields(): void {
 		$this->form_fields = array(
