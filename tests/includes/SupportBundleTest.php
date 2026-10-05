@@ -165,6 +165,23 @@ class SupportBundleTest extends TestCase {
 		$this->assertStringNotContainsString( 'file-d', $bundle );
 	}
 
+	public function test_large_log_reads_only_complete_lines_from_the_tail(): void {
+		$file = WC_LOG_DIR . 'mercadopago-terminal-2026-10-05-large.log';
+		$this->log_files[] = $file;
+		$lines = array();
+		for ( $number = 1; $number <= 65000; ++$number ) { $lines[] = 'line ' . $number; }
+		file_put_contents( $file, implode( "\n", $lines ) . "\n" );
+		$bundle = ( new SupportBundle() )->build();
+		$this->assertStringContainsString( "line 65000\n", $bundle );
+		$this->assertStringNotContainsString( "line 1\n", $bundle );
+		$method = new ReflectionMethod( SupportBundle::class, 'tail_lines' );
+		$method->setAccessible( true );
+		$tail = $method->invoke( null, $file );
+		$this->assertLessThan( count( $lines ), count( $tail ) );
+		$this->assertMatchesRegularExpression( '/^line \d+$/', $tail[0] );
+		$this->assertSame( 'line 65000', end( $tail ) );
+	}
+
 	public function test_database_logs_are_chronological_and_redacted_when_no_files_exist(): void {
 		$GLOBALS['wpdb']->log_rows = array(
 			(object) array( 'timestamp' => '2026-10-05 12:01:00', 'level' => 400, 'message' => 'Bearer abc.def 4111111111111111' ),

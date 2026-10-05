@@ -45,6 +45,22 @@ class SupportBundle {
 		return $prefix . '-…' . substr( $secret, -4 ) . ' (' . $length . ' chars)';
 	}
 
+	private static function tail_lines( string $file, int $max_bytes = 524288 ): array {
+		$handle = @fopen( $file, 'rb' );
+		if ( false === $handle ) { return array(); }
+		$stat = fstat( $handle );
+		if ( false === $stat || ( $stat['size'] > $max_bytes && ( 0 !== fseek( $handle, $stat['size'] - $max_bytes ) || false === fgets( $handle ) ) ) ) {
+			fclose( $handle );
+			return array();
+		}
+		$contents = stream_get_contents( $handle );
+		$closed = fclose( $handle );
+		if ( false === $contents || ! $closed || '' === $contents ) { return array(); }
+		$lines = explode( "\n", $contents );
+		if ( '' === end( $lines ) ) { array_pop( $lines ); }
+		return array_map( static function ( $line ) { return rtrim( $line, "\r" ); }, $lines );
+	}
+
 	public function build(): string {
 		global $wpdb;
 		$lines = array( 'Generated at: ' . gmdate( 'c' ), '', '== Environment ==' );
@@ -106,7 +122,7 @@ class SupportBundle {
 
 		$lines[] = "\n== Recent payment attempts ==";
 		try {
-			$orders = wc_get_orders( array( 'limit' => 10, 'orderby' => 'date', 'order' => 'DESC', 'meta_key' => PaymentAttempt::META_ATTEMPTS, 'meta_compare' => 'EXISTS' ) );
+			$orders = wc_get_orders( array( 'type' => 'shop_order', 'limit' => 10, 'orderby' => 'date', 'order' => 'DESC', 'meta_key' => PaymentAttempt::META_ATTEMPTS, 'meta_compare' => 'EXISTS' ) );
 			foreach ( $orders as $order ) {
 				$lines[] = sprintf( 'Order id: %s; status: %s; total: %s; currency: %s; payment method: %s; transaction id: %s', $order->get_id(), $order->get_status(), $order->get_total(), $order->get_currency(), $order->get_payment_method(), $order->get_transaction_id() );
 				foreach ( PaymentAttempt::history( $order ) as $entry ) {
@@ -124,7 +140,7 @@ class SupportBundle {
 			if ( $files ) {
 				usort( $files, static function ( $a, $b ) { return filemtime( $b ) <=> filemtime( $a ); } );
 				foreach ( array_reverse( array_slice( $files, 0, 3 ) ) as $file ) {
-					$log_lines = array_merge( $log_lines, @file( $file, FILE_IGNORE_NEW_LINES ) ?: array() );
+					$log_lines = array_merge( $log_lines, self::tail_lines( $file ) );
 				}
 			}
 			if ( ! $log_lines ) {
