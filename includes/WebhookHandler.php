@@ -38,6 +38,7 @@ class WebhookHandler {
 			Logger::log( 'Mercado Pago webhook signature not verified: no webhook secret configured', array(), 'warning' );
 		} else {
 			Logger::log( 'Mercado Pago webhook signature valid', array(), 'debug' );
+			update_option( 'mptfwc_last_verified_webhook', time(), false );
 		}
 		if ( array_key_exists( 'type', $body ) && 'order' !== $body['type'] ) {
 			Logger::log( 'Mercado Pago webhook ignored type ' . $body['type'], array( 'order_id' => 0, 'mp_order_id' => $data_id, 'status' => $body['data']['status'] ?? '', 'duration_ms' => Logger::elapsed_ms( $start ) ), 'debug' );

@@ -112,6 +112,7 @@ class AjaxHandler {
 			$this->terminal_service()->set_pdv_mode( $terminal_id );
 			delete_transient( 'mptfwc_terminal_choices_test' );
 			delete_transient( 'mptfwc_terminal_choices_live' );
+			delete_transient( 'mptfwc_terminal_rows' );
 			$result = array( 'terminal_id' => $terminal_id, 'operating_mode' => 'PDV', 'message' => __( 'Switched to PDV mode. Restart the terminal to apply it.', 'mercadopago-terminal-for-woocommerce' ) );
 		} catch ( \Throwable $e ) {
 			Logger::log( 'Terminal PDV switch failed: ' . $e->getMessage(), array(), 'error' );

@@ -54,7 +54,7 @@ class PointPaymentServiceTest extends TestCase {
 			'config' => array( 'point' => array( 'terminal_id' => self::TERMINAL_ID, 'print_on_terminal' => 'no_ticket' ) ),
 		), $payload );
 		$this->assertSame( array(
-			array( 'method' => 'list_terminals', 'args' => array( 50, 0, '', '', 0 ) ),
+			array( 'method' => 'list_terminals', 'args' => array( 50, 0, '', '', 8 ) ),
 			array( 'method' => 'create_order', 'args' => array( $payload, $pending['idempotency_key'] ) ),
 		), $this->client->calls );
 		$this->assertSame( $remote['id'], PaymentAttempt::current( $this->order )['mp_order_id'] );
@@ -63,7 +63,7 @@ class PointPaymentServiceTest extends TestCase {
 
 	public function test_failed_create_rethrows_and_retry_reuses_persisted_key_and_reference(): void {
 		$error = new MercadoPagoApiException( 'timeout', 0 );
-		$this->client->returns['list_terminals'] = array( $this->fixture( 'terminals-list' ), $this->fixture( 'terminals-list' ) );
+		$this->client->returns['list_terminals'] = array( $this->fixture( 'terminals-list' ) );
 		$this->client->returns['create_order'] = array( $error );
 		try {
 			$this->service->start_payment_for_order( $this->order );
@@ -78,9 +78,9 @@ class PointPaymentServiceTest extends TestCase {
 		$this->assertSame( 'error', end( WP_Stub::$logs )['level'] );
 		$this->client->returns['create_order'] = array( $this->fixture( 'order-created', $pending ) );
 		$this->assertSame( 'created', $this->service->start_payment_for_order( $this->order )['status'] );
-		$this->assertSame( array( 'list_terminals', 'create_order', 'list_terminals', 'create_order' ), array_column( $this->client->calls, 'method' ) );
+		$this->assertSame( array( 'list_terminals', 'create_order', 'create_order' ), array_column( $this->client->calls, 'method' ) );
 		$first = $this->client->calls[1]['args'];
-		$second = $this->client->calls[3]['args'];
+		$second = $this->client->calls[2]['args'];
 		$this->assertSame( $pending['idempotency_key'], $first[1] );
 		$this->assertSame( $first[1], $second[1] );
 		$this->assertSame( $pending['external_reference'], $first[0]['external_reference'] );
@@ -91,7 +91,7 @@ class PointPaymentServiceTest extends TestCase {
 	/** @dataProvider create_rejection_status_provider */
 	public function test_rejected_create_discards_only_definitive_4xx( int $http_status, bool $discard ): void {
 		$error = new MercadoPagoApiException( 'Create failed.', $http_status );
-		$this->client->returns['list_terminals'] = array( $this->fixture( 'terminals-list' ), $this->fixture( 'terminals-list' ) );
+		$this->client->returns['list_terminals'] = array( $this->fixture( 'terminals-list' ) );
 		$this->client->returns['create_order'] = array( $error );
 		try {
 			$this->service->start_payment_for_order( $this->order );
@@ -113,7 +113,8 @@ class PointPaymentServiceTest extends TestCase {
 			return $payload;
 		} );
 		$this->assertSame( 'created', $this->service->start_payment_for_order( $this->order )['status'] );
-		$second = $this->client->calls[3]['args'];
+		$this->assertSame( array( 'list_terminals', 'create_order', 'create_order' ), array_column( $this->client->calls, 'method' ) );
+		$second = $this->client->calls[2]['args'];
 		$this->assertSame( ! $discard, $first[1] === $second[1] );
 		$this->assertSame( ! $discard, $first[0]['external_reference'] === $second[0]['external_reference'] );
 		$this->assertCount( $discard ? 2 : 1, PaymentAttempt::history( $this->order ) );

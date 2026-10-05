@@ -37,6 +37,9 @@ jobs:
           set -euo pipefail
           find . -path ./vendor -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
 
+      - name: No case-colliding paths
+        run: test -z "$(git ls-files | tr '[:upper:]' '[:lower:]' | sort | uniq -d)"
+
       - name: Unit tests
         run: composer test
 
