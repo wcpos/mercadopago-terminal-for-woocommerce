@@ -176,8 +176,14 @@ class LoggingTest extends TestCase {
 		$this->assertSame( 'ORD1', $received['data_id'] );
 		$this->assertSame( $level, $this->entry( 'Mercado Pago webhook signature ' . $message )['level'] );
 		$this->assertCount( 1, array_filter( WP_Stub::$logs, function ( $entry ) { return false !== strpos( $entry['message'], '] Mercado Pago webhook signature ' ); } ) );
+		if ( 'invalid' === $mode ) {
+			$this->assertSame( 'id:ord1;request-id:req-1;ts:1742505638683;', $this->context( 'Mercado Pago webhook signature invalid' )['manifest'] );
+			$this->assertSame( 'req-1', $this->context( 'Mercado Pago webhook signature invalid' )['x_request_id'] );
+		}
 		if ( 'invalid' !== $mode ) { $this->assertIsInt( $this->context( 'Mercado Pago webhook ignored type payment' )['duration_ms'] ); }
-		foreach ( array( $hex, str_repeat( 'a', 64 ), $secret, '4111111111111111' ) as $value ) { $this->assertStringNotContainsString( $value, json_encode( WP_Stub::$logs ) ); }
+		foreach ( WP_Stub::$logs as $entry ) {
+			foreach ( array( $hex, str_repeat( 'a', 64 ), $secret, '4111111111111111' ) as $value ) { $this->assertStringNotContainsString( $value, json_encode( $entry ) ); }
+		}
 	}
 
 	public function signatures(): array {

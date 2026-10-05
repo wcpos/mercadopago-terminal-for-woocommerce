@@ -31,7 +31,7 @@ class WebhookHandler {
 		$settings = new Settings();
 		$secret = $settings->webhook_secret();
 		if ( '' !== $secret && ! WebhookSignature::verify( $signature, $request_id, $data_id, $secret ) ) {
-			Logger::log( 'Mercado Pago webhook signature invalid', array( 'ts' => $sig['ts'] ?? '', 'data_id' => $data_id ), 'warning' );
+			Logger::log( 'Mercado Pago webhook signature invalid', array( 'ts' => $sig['ts'] ?? '', 'data_id' => $data_id, 'manifest' => WebhookSignature::manifest( $data_id, $request_id, (string) ( $sig['ts'] ?? '' ) ), 'x_request_id' => $request_id ), 'warning' );
 			return array( 'code' => 401, 'body' => 'Invalid signature' );
 		}
 		if ( '' === $secret ) {
