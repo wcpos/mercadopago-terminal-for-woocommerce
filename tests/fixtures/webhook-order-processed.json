@@ -1,0 +1,1 @@
+{"action":"order.processed","api_version":"v1","application_id":"123456","data":{"id":"ORD01JYH1Z1YJN4HZ8J3Q0RB3YP6D","status":"processed"},"date_created":"2026-10-05T12:01:31Z","id":"123456789","live_mode":false,"type":"order","user_id":"123456"}
