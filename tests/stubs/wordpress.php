@@ -9,6 +9,15 @@ class WP_Stub {
 	public static $http_responses = array();
 	public static $uuid_counter = 0;
 	public static $status = null;
+	public static $doing_ajax = false;
+	public static $caps = array();
+	public static $nonce_ok = false;
+	public static $json = null;
+	public static $transients = array();
+	public static $is_admin = false;
+	public static $scripts = array();
+	public static $checkout_pay_page = false;
+	public static $notices = array();
 
 	public static function reset(): void {
 		self::$options = array();
@@ -19,8 +28,64 @@ class WP_Stub {
 		self::$http_responses = array();
 		self::$uuid_counter = 0;
 		self::$status = null;
+		self::$doing_ajax = false;
+		self::$caps = array();
+		self::$nonce_ok = false;
+		self::$json = null;
+		self::$transients = array();
+		self::$is_admin = false;
+		self::$scripts = array();
+		self::$checkout_pay_page = false;
+		self::$notices = array();
 	}
 }
+
+if ( ! defined( 'MINUTE_IN_SECONDS' ) ) { define( 'MINUTE_IN_SECONDS', 60 ); }
+// Simulate exit without being caught by the handlers' service-exception catches.
+if ( ! class_exists( 'WP_Stub_Json_Exit' ) ) { class WP_Stub_Json_Exit extends Error {} }
+if ( ! function_exists( 'wp_doing_ajax' ) ) { function wp_doing_ajax() { return WP_Stub::$doing_ajax; } }
+if ( ! function_exists( 'current_user_can' ) ) { function current_user_can( $cap, ...$args ) { return ! empty( WP_Stub::$caps[ $cap ] ); } }
+if ( ! function_exists( 'check_ajax_referer' ) ) { function check_ajax_referer( $action, $query_arg = false, $stop = true ) { return WP_Stub::$nonce_ok; } }
+if ( ! function_exists( 'wp_send_json_success' ) ) {
+	function wp_send_json_success( $data = null, $status_code = null ) {
+		WP_Stub::$json = array( 'success' => true, 'data' => $data, 'code' => $status_code ?? 200 );
+		throw new WP_Stub_Json_Exit();
+	}
+}
+if ( ! function_exists( 'wp_send_json_error' ) ) {
+	function wp_send_json_error( $data = null, $status_code = null ) {
+		WP_Stub::$json = array( 'success' => false, 'data' => $data, 'code' => $status_code ?? 200 );
+		throw new WP_Stub_Json_Exit();
+	}
+}
+if ( ! function_exists( 'absint' ) ) { function absint( $value ) { return abs( (int) $value ); } }
+if ( ! function_exists( 'wp_unslash' ) ) { function wp_unslash( $value ) { return stripslashes( $value ); } }
+if ( ! function_exists( 'wp_salt' ) ) { function wp_salt( $scheme = 'auth' ) { return 'test-salt-' . $scheme; } }
+if ( ! function_exists( 'wp_hash' ) ) { function wp_hash( $data, $scheme = 'auth' ) { return hash_hmac( 'md5', $data, wp_salt( $scheme ) ); } }
+if ( ! function_exists( 'get_home_url' ) ) { function get_home_url( $blog_id = null, $path = '' ) { return 'https://shop.test' . $path; } }
+if ( ! function_exists( 'get_transient' ) ) { function get_transient( $key ) { return WP_Stub::$transients[ $key ] ?? false; } }
+if ( ! function_exists( 'set_transient' ) ) { function set_transient( $key, $value, $expiration = 0 ) { WP_Stub::$transients[ $key ] = $value; return true; } }
+if ( ! function_exists( 'delete_transient' ) ) { function delete_transient( $key ) { unset( WP_Stub::$transients[ $key ] ); return true; } }
+if ( ! function_exists( 'is_admin' ) ) { function is_admin() { return WP_Stub::$is_admin; } }
+if ( ! function_exists( 'esc_attr' ) ) { function esc_attr( $value ) { return htmlspecialchars( (string) $value, ENT_QUOTES, 'UTF-8' ); } }
+if ( ! function_exists( 'esc_attr__' ) ) { function esc_attr__( $text, $domain = '' ) { return esc_attr( __( $text, $domain ) ); } }
+if ( ! function_exists( 'esc_html__' ) ) { function esc_html__( $text, $domain = '' ) { return esc_html( __( $text, $domain ) ); } }
+if ( ! function_exists( 'esc_url' ) ) { function esc_url( $url ) { return htmlspecialchars( $url, ENT_QUOTES, 'UTF-8' ); } }
+if ( ! function_exists( 'wp_kses_post' ) ) { function wp_kses_post( $data ) { return $data; } }
+if ( ! function_exists( 'wp_create_nonce' ) ) { function wp_create_nonce( $action = -1 ) { return 'nonce-' . $action; } }
+if ( ! function_exists( 'wp_enqueue_script' ) ) {
+	function wp_enqueue_script( $handle, $src = '', $deps = array(), $ver = false, $in_footer = false ) {
+		WP_Stub::$scripts[ $handle ]['script'] = compact( 'src', 'deps', 'ver', 'in_footer' );
+	}
+}
+if ( ! function_exists( 'wp_enqueue_style' ) ) {
+	function wp_enqueue_style( $handle, $src = '', $deps = array(), $ver = false ) {
+		WP_Stub::$scripts[ $handle ]['style'] = compact( 'src', 'deps', 'ver' );
+	}
+}
+if ( ! function_exists( 'wp_localize_script' ) ) { function wp_localize_script( $handle, $object_name, $data ) { WP_Stub::$scripts[ $handle ]['localized'][ $object_name ] = $data; return true; } }
+if ( ! function_exists( 'is_checkout_pay_page' ) ) { function is_checkout_pay_page() { return WP_Stub::$checkout_pay_page; } }
+if ( ! function_exists( 'wc_add_notice' ) ) { function wc_add_notice( $message, $type = 'success' ) { WP_Stub::$notices[] = compact( 'message', 'type' ); } }
 
 if ( ! function_exists( 'wp_generate_uuid4' ) ) { function wp_generate_uuid4() { return sprintf( '00000000-0000-4000-8000-%012d', ++WP_Stub::$uuid_counter ); } }
 if ( ! function_exists( 'sanitize_key' ) ) { function sanitize_key( $key ) { return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( $key ) ); } }

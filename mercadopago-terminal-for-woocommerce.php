@@ -59,7 +59,8 @@ function load_textdomain(): void {
 add_action( 'init', __NAMESPACE__ . '\\load_textdomain' );
 
 function init(): void {
-	// Later changes register the gateway, AJAX and webhook handlers here.
+	add_filter( 'woocommerce_payment_gateways', array( Gateway::class, 'register_gateway' ) );
+	new AjaxHandler();
 	new WebhookHandler();
 	do_action( 'mptfwc_init' );
 }

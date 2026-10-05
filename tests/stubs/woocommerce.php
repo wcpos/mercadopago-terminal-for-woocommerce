@@ -1,4 +1,21 @@
 <?php
+if ( ! class_exists( 'WC_Payment_Gateway' ) ) {
+	class WC_Payment_Gateway {
+		public string $id = '';
+		public string $method_title = '';
+		public string $method_description = '';
+		public $title = null;
+		public $description = null;
+		public array $supports = array();
+		public array $form_fields = array();
+		protected array $settings = array();
+		public function init_settings(): void { $this->settings = (array) get_option( 'woocommerce_' . $this->id . '_settings', array() ); }
+		public function get_option( $key, $default = '' ) { return $this->settings[ $key ] ?? $default; }
+		public function process_admin_options() { return true; }
+		public function admin_options(): void {}
+	}
+}
+
 class MPTFWC_Test_Order {
 	public int $id;
 	public array $meta = array();
@@ -14,6 +31,8 @@ class MPTFWC_Test_Order {
 
 	public function __construct( $id = 123 ) { $this->id = $id; }
 	public function get_id() { return $this->id; }
+	public function get_order_key() { return 'key'; }
+	public function get_checkout_order_received_url() { return '/checkout/order-received/' . $this->id . '/?key=' . $this->get_order_key(); }
 	public function get_meta( $key, $single = true ) { return $this->meta[ $key ] ?? ( $single ? '' : array() ); }
 	public function update_meta_data( $key, $value ) { $this->meta[ $key ] = $value; }
 	public function delete_meta_data( $key ) { unset( $this->meta[ $key ] ); }
