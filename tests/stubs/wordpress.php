@@ -7,6 +7,7 @@ class WP_Stub {
 	public static $boot_actions = array();
 	public static $http_requests = array();
 	public static $http_responses = array();
+	public static $uuid_counter = 0;
 
 	public static function reset(): void {
 		self::$options = array();
@@ -15,8 +16,12 @@ class WP_Stub {
 		self::$logs = array();
 		self::$http_requests = array();
 		self::$http_responses = array();
+		self::$uuid_counter = 0;
 	}
 }
+
+if ( ! function_exists( 'wp_generate_uuid4' ) ) { function wp_generate_uuid4() { return sprintf( '00000000-0000-4000-8000-%012d', ++WP_Stub::$uuid_counter ); } }
+if ( ! function_exists( 'sanitize_key' ) ) { function sanitize_key( $key ) { return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( $key ) ); } }
 
 if ( ! function_exists( 'plugin_dir_path' ) ) { function plugin_dir_path( $file ) { return dirname( $file ) . '/'; } }
 if ( ! function_exists( 'plugin_dir_url' ) ) { function plugin_dir_url( $file ) { return 'https://shop.test/wp-content/plugins/' . basename( dirname( $file ) ) . '/'; } }
