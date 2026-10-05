@@ -5,12 +5,16 @@ class WP_Stub {
 	public static $filters = array();
 	public static $logs = array();
 	public static $boot_actions = array();
+	public static $http_requests = array();
+	public static $http_responses = array();
 
 	public static function reset(): void {
 		self::$options = array();
 		self::$actions = array();
 		self::$filters = array();
 		self::$logs = array();
+		self::$http_requests = array();
+		self::$http_responses = array();
 	}
 }
 
@@ -61,6 +65,22 @@ if ( ! function_exists( 'add_query_arg' ) ) {
 	}
 }
 if ( ! function_exists( 'wp_json_encode' ) ) { function wp_json_encode( $data ) { return json_encode( $data ); } }
+if ( ! class_exists( 'WP_Error' ) ) {
+	class WP_Error {
+		private $message;
+		public function __construct( $code = '', $message = '' ) { $this->message = $message; }
+		public function get_error_message() { return $this->message; }
+	}
+}
+if ( ! function_exists( 'is_wp_error' ) ) { function is_wp_error( $value ) { return $value instanceof WP_Error; } }
+if ( ! function_exists( 'wp_remote_request' ) ) {
+	function wp_remote_request( $url, $args ) {
+		WP_Stub::$http_requests[] = array( 'url' => $url, 'args' => $args );
+		return array_shift( WP_Stub::$http_responses );
+	}
+}
+if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) { function wp_remote_retrieve_response_code( $response ) { return $response['response']['code']; } }
+if ( ! function_exists( 'wp_remote_retrieve_body' ) ) { function wp_remote_retrieve_body( $response ) { return $response['body']; } }
 if ( ! function_exists( 'load_plugin_textdomain' ) ) { function load_plugin_textdomain( $domain, $deprecated = false, $path = '' ) { return true; } }
 if ( ! function_exists( 'deactivate_plugins' ) ) { function deactivate_plugins( $plugins ) {} }
 if ( ! function_exists( 'wp_die' ) ) { function wp_die( $message ) { throw new RuntimeException( $message ); } }

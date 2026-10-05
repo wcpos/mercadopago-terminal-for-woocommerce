@@ -1,0 +1,11 @@
+{
+  "errors": [
+    {
+      "code": "invalid_status_transition",
+      "message": "The order cannot be canceled in its current status.",
+      "details": [
+        "status: at_terminal"
+      ]
+    }
+  ]
+}

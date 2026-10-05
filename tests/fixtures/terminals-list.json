@@ -1,0 +1,25 @@
+{
+  "data": {
+    "terminals": [
+      {
+        "id": "NEWLAND_N950__SBX0000001",
+        "pos_id": 23545678,
+        "store_id": "12354567",
+        "external_pos_id": "SUC0101POS",
+        "operating_mode": "PDV"
+      },
+      {
+        "id": "NEWLAND_N950__N950NCB801293324",
+        "pos_id": 23545679,
+        "store_id": "12354567",
+        "external_pos_id": "SUC0101POS2",
+        "operating_mode": "STANDALONE"
+      }
+    ]
+  },
+  "paging": {
+    "total": 2,
+    "offset": 0,
+    "limit": 50
+  }
+}

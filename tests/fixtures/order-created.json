@@ -1,0 +1,29 @@
+{
+  "id": "ORD01JYH1Z1YJN4HZ8J3Q0RB3YP6D",
+  "type": "point",
+  "processing_mode": "automatic",
+  "external_reference": "wcpos-123-a1b2c3d4",
+  "description": "Order #123",
+  "expiration_time": "PT15M",
+  "user_id": "123456",
+  "status": "created",
+  "status_detail": "created",
+  "created_date": "2026-10-05T12:00:00.000Z",
+  "last_updated_date": "2026-10-05T12:00:00.000Z",
+  "transactions": {
+    "payments": [
+      {
+        "id": "PAY01JYH1Z1YJN4HZ8J3Q0RB3YP6E",
+        "amount": "24.00",
+        "status": "created",
+        "status_detail": "created"
+      }
+    ]
+  },
+  "config": {
+    "point": {
+      "terminal_id": "NEWLAND_N950__SBX0000001",
+      "print_on_terminal": "no_ticket"
+    }
+  }
+}
