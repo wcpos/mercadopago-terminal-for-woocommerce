@@ -23,6 +23,7 @@ class MPTFWC_Test_Order {
 	public array $refunds = array();
 	public bool $paid = false;
 	public string $transaction_id = '';
+	public string $status = 'pending';
 	public int $payment_complete_calls = 0;
 	public string $total = '24.00';
 	public string $currency = 'MXN';
@@ -41,6 +42,7 @@ class MPTFWC_Test_Order {
 	public function save() { $this->save_calls++; }
 	public function is_paid() { return $this->paid; }
 	public function get_transaction_id() { return $this->transaction_id; }
+	public function get_status() { return $this->status; }
 	public function get_refunds() { return $this->refunds; }
 	public function set_transaction_id( $id ) { $this->transaction_id = $id; }
 	public function get_total() { return $this->total; }
@@ -77,10 +79,18 @@ if ( ! function_exists( 'wc_get_orders' ) ) { function wc_get_orders( $args ) { 
 
 /** The options-table queries PaymentLock runs, including atomic INSERT IGNORE. */
 class MPTFWC_Fake_Wpdb {
+	public $prefix = 'wp_';
+	public $log_rows = array();
+	public $log_query;
 	public $options = 'wp_options';
 	public $rows = array();
 	/** @var callable|null Runs once before the next INSERT to stage a competing request. */
 	public $before_insert;
+
+	public function get_results( $query ) {
+		$this->log_query = $query;
+		return $this->log_rows;
+	}
 
 	public function prepare( $query, ...$args ) {
 		return json_encode( array( $query, $args ) );

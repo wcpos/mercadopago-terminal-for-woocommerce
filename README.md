@@ -48,7 +48,13 @@ Refunds go through the normal WooCommerce refund screen (*Refund via Mercado Pag
 - **Exactly once.** Completion runs under a per-order lock in `wp_options` and is idempotent on the transaction id. A second payment for an already-paid order is recorded as a conflict note, not completed again.
 - **Webhooks are verified and never trusted.** The `x-signature` HMAC-SHA256 is checked with the webhook secret before anything else. Only `data.id` is read from the body; the order is always fetched from the API with the shop's token.
 - **Checkout endpoints** need a per-order token or an order capability; switching a terminal to PDV needs `manage_woocommerce` and a nonce.
-- Access tokens are redacted from all logs (WooCommerce → Status → Logs, source `mercadopago-terminal-for-woocommerce`).
+- Access tokens, webhook signatures and card numbers are redacted from all logs.
+
+## Reporting a problem
+
+**Something not working? Go to WooCommerce → Settings → Payments → Mercado Pago Terminal, click _Download support bundle_, and attach the file to your support request.** It contains your environment, settings (secrets masked), terminals, recent payment attempts and the plugin's recent log. Nothing in it can be used to take payments.
+
+Logging is at **Debug** by default while the plugin is in beta (setting *Log level*). It records every Mercado Pago request and response, every webhook and every payment state change, with timings and a request id on each line. You can read it yourself under WooCommerce → Status → Logs, source `mercadopago-terminal`.
 
 ## What is untested
 

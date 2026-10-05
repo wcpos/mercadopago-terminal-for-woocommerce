@@ -183,6 +183,10 @@ class Gateway extends WC_Payment_Gateway {
 		);
 		echo '</td></tr>';
 		echo '</tbody></table>';
+		echo '<h2>' . esc_html__( 'Support', 'mercadopago-terminal-for-woocommerce' ) . '</h2>';
+		echo '<p>' . esc_html__( 'When something goes wrong, download the support bundle and attach it to your support request. It contains your settings (secrets masked), environment, terminals, recent payment attempts and the plugin\'s recent log.', 'mercadopago-terminal-for-woocommerce' ) . '</p>';
+		echo '<p><a class="button" href="' . esc_url( SupportBundle::url() ) . '">' . esc_html__( 'Download support bundle', 'mercadopago-terminal-for-woocommerce' ) . '</a> ';
+		echo '<a href="' . esc_url( admin_url( 'admin.php?page=wc-status&tab=logs&source=mercadopago-terminal' ) ) . '">' . esc_html__( 'View logs', 'mercadopago-terminal-for-woocommerce' ) . '</a></p>';
 		if ( null === $this->fetch_terminal_options() ) { return; }
 		try {
 			$terminals = ( new TerminalService( new MercadoPagoClient( $settings->access_token() ), $settings ) )->list_terminals( 8 );
