@@ -44,6 +44,27 @@ class PaymentAttemptTest extends TestCase {
 		$this->assertSame( 1, $this->order->save_calls );
 	}
 
+	public function test_discard_pending_marks_history_rejected_and_next_prepare_gets_new_key(): void {
+		PaymentAttempt::prepare( $this->order, 'terminal-older', '24.00' );
+		$pending = PaymentAttempt::prepare( $this->order, 'terminal-1', '24.00' );
+		$history = PaymentAttempt::history( $this->order );
+		$older = $history[0];
+		$history[1]['updated_at'] = '2000-01-01T00:00:00+00:00';
+		$this->order->update_meta_data( PaymentAttempt::META_ATTEMPTS, $history );
+		PaymentAttempt::discard_pending( $this->order, $pending );
+		$this->assertArrayNotHasKey( PaymentAttempt::META_PENDING_CREATE, $this->order->meta );
+		$this->assertSame( 3, $this->order->save_calls );
+		$history = PaymentAttempt::history( $this->order );
+		$this->assertSame( $older, $history[0] );
+		$this->assertSame( $pending['attempt_id'], $history[1]['attempt_id'] );
+		$this->assertSame( 'rejected', $history[1]['status'] );
+		$this->assertGreaterThan( strtotime( '2000-01-01T00:00:00+00:00' ), strtotime( $history[1]['updated_at'] ) );
+		$next = PaymentAttempt::prepare( $this->order, 'terminal-1', '24.00' );
+		$this->assertNotSame( $pending['idempotency_key'], $next['idempotency_key'] );
+		$this->assertNotSame( $pending['external_reference'], $next['external_reference'] );
+		$this->assertSame( 'creating', PaymentAttempt::history( $this->order )[2]['status'] );
+	}
+
 	/** @dataProvider changed_request_provider */
 	public function test_prepare_creates_new_key_when_request_changes_or_expires( string $terminal, string $amount, bool $expired ): void {
 		$pending = PaymentAttempt::prepare( $this->order, 'terminal-1', '24.00' );

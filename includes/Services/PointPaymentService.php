@@ -42,6 +42,9 @@ class PointPaymentService {
 			try {
 				$mp_order = $this->client->create_order( self::build_payload( $order, $pending ), $pending['idempotency_key'] );
 			} catch ( \Throwable $e ) {
+				if ( $e instanceof MercadoPagoApiException && $e->http_status() >= 400 && $e->http_status() <= 499 && ! in_array( $e->http_status(), array( 409, 429 ), true ) ) {
+					PaymentAttempt::discard_pending( $order, $pending );
+				}
 				Logger::log( 'Could not create Mercado Pago Point order: ' . $e->getMessage(), array( 'order_id' => (int) $order->get_id(), 'terminal_id' => $terminal_id ), 'error' );
 				throw $e;
 			}

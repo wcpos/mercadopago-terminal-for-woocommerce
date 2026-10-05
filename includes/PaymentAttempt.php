@@ -78,6 +78,19 @@ class PaymentAttempt {
 		$order->save();
 	}
 
+	public static function discard_pending( $order, array $pending ): void {
+		$order->delete_meta_data( self::META_PENDING_CREATE );
+		$history = self::history( $order );
+		foreach ( $history as &$attempt ) {
+			if ( $attempt['attempt_id'] === $pending['attempt_id'] ) {
+				$attempt['status'] = 'rejected';
+				$attempt['updated_at'] = gmdate( 'c' );
+			}
+		}
+		$order->update_meta_data( self::META_ATTEMPTS, $history );
+		$order->save();
+	}
+
 	public static function update_status( $order, array $mp_order ): void {
 		$status = self::status( $mp_order );
 		if ( (string) $order->get_meta( self::META_CURRENT_MP_ORDER_ID ) === $mp_order['id'] ) {

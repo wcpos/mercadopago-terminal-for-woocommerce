@@ -88,6 +88,49 @@ class PointPaymentServiceTest extends TestCase {
 		$this->assertCount( 1, PaymentAttempt::history( $this->order ) );
 	}
 
+	/** @dataProvider create_rejection_status_provider */
+	public function test_rejected_create_discards_only_definitive_4xx( int $http_status, bool $discard ): void {
+		$error = new MercadoPagoApiException( 'Create failed.', $http_status );
+		$this->client->returns['list_terminals'] = array( $this->fixture( 'terminals-list' ), $this->fixture( 'terminals-list' ) );
+		$this->client->returns['create_order'] = array( $error );
+		try {
+			$this->service->start_payment_for_order( $this->order );
+			$this->fail( 'The create exception must be rethrown.' );
+		} catch ( MercadoPagoApiException $caught ) {
+			$this->assertSame( $error, $caught );
+		}
+		$first = $this->client->calls[1]['args'];
+		$history = PaymentAttempt::history( $this->order );
+		$this->assertSame( $discard ? 'rejected' : 'creating', $history[0]['status'] );
+		$this->assertSame( $discard ? 2 : 1, $this->order->save_calls );
+		if ( $discard ) {
+			$this->assertArrayNotHasKey( PaymentAttempt::META_PENDING_CREATE, $this->order->meta );
+		} else {
+			$this->assertSame( $history[0]['attempt_id'], $this->order->get_meta( PaymentAttempt::META_PENDING_CREATE )['attempt_id'] );
+		}
+		add_filter( 'mptfwc_order_payload', function ( $payload, $order ) {
+			$this->client->returns['create_order'] = array( $this->fixture( 'order-created', $order->get_meta( PaymentAttempt::META_PENDING_CREATE ) ) );
+			return $payload;
+		} );
+		$this->assertSame( 'created', $this->service->start_payment_for_order( $this->order )['status'] );
+		$second = $this->client->calls[3]['args'];
+		$this->assertSame( ! $discard, $first[1] === $second[1] );
+		$this->assertSame( ! $discard, $first[0]['external_reference'] === $second[0]['external_reference'] );
+		$this->assertCount( $discard ? 2 : 1, PaymentAttempt::history( $this->order ) );
+		$this->assertSame( $discard ? 'rejected' : 'created', PaymentAttempt::history( $this->order )[0]['status'] );
+	}
+
+	public static function create_rejection_status_provider(): array {
+		return array(
+			'bad request' => array( 400, true ),
+			'unprocessable entity' => array( 422, true ),
+			'transport error' => array( 0, false ),
+			'server error' => array( 500, false ),
+			'conflict' => array( 409, false ),
+			'rate limited' => array( 429, false ),
+		);
+	}
+
 	public function test_standalone_terminal_prevents_create(): void {
 		$this->client->returns['list_terminals'] = array( $this->fixture( 'terminals-list' ) );
 		$this->expectException( RuntimeException::class );
