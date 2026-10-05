@@ -53,7 +53,10 @@ class WebhookHandlerTest extends TestCase {
 	}
 
 	public function test_valid_signature_fetches_and_completes_order(): void {
+		$before = time();
 		$this->assertSame( array( 'code' => 200, 'body' => 'OK' ), $this->handler->process( $this->body, $this->signature, self::REQUEST_ID, array() ) );
+		$this->assertGreaterThanOrEqual( $before, get_option( 'mptfwc_last_verified_webhook' ) );
+		$this->assertLessThanOrEqual( time(), get_option( 'mptfwc_last_verified_webhook' ) );
 		$this->assertSame( array( 'TEST-token' ), $this->tokens );
 		$this->assertSame( array( array( 'method' => 'get_order', 'args' => array( self::DATA_ID ) ) ), $this->client->calls );
 		$this->assertTrue( $this->order->is_paid() );
@@ -66,6 +69,7 @@ class WebhookHandlerTest extends TestCase {
 	public function test_invalid_signature_rejects_without_client_or_order_changes(): void {
 		$before = clone $this->order;
 		$this->assertSame( array( 'code' => 401, 'body' => 'Invalid signature' ), $this->handler->process( $this->body, 'ts=1,v1=invalid', self::REQUEST_ID, array() ) );
+		$this->assertFalse( get_option( 'mptfwc_last_verified_webhook' ) );
 		$this->assertSame( array(), $this->tokens );
 		$this->assertSame( array(), $this->client->calls );
 		$this->assertEquals( $before, $this->order );
@@ -77,6 +81,7 @@ class WebhookHandlerTest extends TestCase {
 	public function test_no_secret_processes_and_logs_warning(): void {
 		WP_Stub::$options['woocommerce_' . Settings::GATEWAY_ID . '_settings']['webhook_secret'] = '';
 		$this->assertSame( array( 'code' => 200, 'body' => 'OK' ), $this->handler->process( $this->body, '', self::REQUEST_ID, array() ) );
+		$this->assertFalse( get_option( 'mptfwc_last_verified_webhook' ) );
 		$this->assertTrue( $this->order->is_paid() );
 		$warnings = array_values( array_filter( WP_Stub::$logs, function ( $entry ) { return 'warning' === $entry['level']; } ) );
 		$this->assertCount( 1, $warnings );

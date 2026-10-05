@@ -11,8 +11,22 @@ if ( ! class_exists( 'WC_Payment_Gateway' ) ) {
 		protected array $settings = array();
 		public function init_settings(): void { $this->settings = (array) get_option( 'woocommerce_' . $this->id . '_settings', array() ); }
 		public function get_option( $key, $default = '' ) { return $this->settings[ $key ] ?? $default; }
-		public function process_admin_options() { return true; }
-		public function admin_options(): void {}
+		public function get_field_key( $key ) { return 'woocommerce_' . $this->id . '_' . $key; }
+		public function process_admin_options() {
+			foreach ( $this->form_fields as $key => $data ) {
+				if ( ! isset( $_POST[ $this->get_field_key( $key ) ] ) ) { continue; }
+				$value = $_POST[ $this->get_field_key( $key ) ];
+				$validator = 'validate_' . $data['type'] . '_field';
+				$this->settings[ $key ] = method_exists( $this, $validator ) ? $this->$validator( $key, $value ) : $value;
+			}
+			return update_option( 'woocommerce_' . $this->id . '_settings', $this->settings );
+		}
+		public function admin_options(): void {
+			foreach ( $this->form_fields as $key => $data ) {
+				$renderer = 'generate_' . $data['type'] . '_html';
+				if ( method_exists( $this, $renderer ) ) { echo $this->$renderer( $key, $data ); }
+			}
+		}
 	}
 }
 
@@ -35,6 +49,7 @@ class MPTFWC_Test_Order {
 	public function get_id() { return $this->id; }
 	public function get_order_key() { return 'key'; }
 	public function get_checkout_order_received_url() { return '/checkout/order-received/' . $this->id . '/?key=' . $this->get_order_key(); }
+	public function get_checkout_payment_url( $on_checkout = false ) { return '/checkout/order-pay/' . $this->id . '/?key=' . $this->get_order_key() . ( $on_checkout ? '' : '&pay_for_order=true' ); }
 	public function get_meta( $key, $single = true ) { return $this->meta[ $key ] ?? ( $single ? '' : array() ); }
 	public function update_meta_data( $key, $value ) { $this->meta[ $key ] = $value; }
 	public function delete_meta_data( $key ) { unset( $this->meta[ $key ] ); }

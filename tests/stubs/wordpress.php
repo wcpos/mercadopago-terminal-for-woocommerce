@@ -15,6 +15,7 @@ class WP_Stub {
 	public static $nonce_ok = false;
 	public static $json = null;
 	public static $transients = array();
+	public static $transient_expirations = array();
 	public static $is_admin = false;
 	public static $scripts = array();
 	public static $checkout_pay_page = false;
@@ -37,6 +38,7 @@ class WP_Stub {
 		self::$nonce_ok = false;
 		self::$json = null;
 		self::$transients = array();
+		self::$transient_expirations = array();
 		self::$is_admin = false;
 		self::$scripts = array();
 		self::$checkout_pay_page = false;
@@ -83,7 +85,7 @@ if ( ! function_exists( 'wp_salt' ) ) { function wp_salt( $scheme = 'auth' ) { r
 if ( ! function_exists( 'wp_hash' ) ) { function wp_hash( $data, $scheme = 'auth' ) { return hash_hmac( 'md5', $data, wp_salt( $scheme ) ); } }
 if ( ! function_exists( 'get_home_url' ) ) { function get_home_url( $blog_id = null, $path = '' ) { return 'https://shop.test' . $path; } }
 if ( ! function_exists( 'get_transient' ) ) { function get_transient( $key ) { return WP_Stub::$transients[ $key ] ?? false; } }
-if ( ! function_exists( 'set_transient' ) ) { function set_transient( $key, $value, $expiration = 0 ) { WP_Stub::$transients[ $key ] = $value; return true; } }
+if ( ! function_exists( 'set_transient' ) ) { function set_transient( $key, $value, $expiration = 0 ) { WP_Stub::$transients[ $key ] = $value; WP_Stub::$transient_expirations[ $key ] = $expiration; return true; } }
 if ( ! function_exists( 'delete_transient' ) ) { function delete_transient( $key ) { unset( WP_Stub::$transients[ $key ] ); return true; } }
 if ( ! function_exists( 'is_admin' ) ) { function is_admin() { return WP_Stub::$is_admin; } }
 if ( ! function_exists( 'esc_attr' ) ) { function esc_attr( $value ) { return htmlspecialchars( (string) $value, ENT_QUOTES, 'UTF-8' ); } }
@@ -146,6 +148,8 @@ if ( ! function_exists( 'apply_filters' ) ) {
 	}
 }
 if ( ! function_exists( 'get_option' ) ) { function get_option( $key, $default = false ) { return WP_Stub::$options[ $key ] ?? $default; } }
+if ( ! function_exists( 'update_option' ) ) { function update_option( $key, $value, $autoload = null ) { $changed = ! array_key_exists( $key, WP_Stub::$options ) || WP_Stub::$options[ $key ] !== $value; WP_Stub::$options[ $key ] = $value; return $changed; } }
+if ( ! function_exists( 'delete_option' ) ) { function delete_option( $key ) { unset( WP_Stub::$options[ $key ] ); return true; } }
 if ( ! function_exists( '__' ) ) { function __( $text, $domain = '' ) { return $text; } }
 if ( ! function_exists( 'esc_html' ) ) { function esc_html( $value ) { return htmlspecialchars( (string) $value, ENT_QUOTES, 'UTF-8' ); } }
 if ( ! function_exists( 'admin_url' ) ) { function admin_url( $path = '' ) { return 'https://shop.test/wp-admin/' . $path; } }

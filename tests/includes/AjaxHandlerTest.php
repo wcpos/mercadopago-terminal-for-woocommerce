@@ -150,7 +150,7 @@ class AjaxHandlerTest extends TestCase {
 	public function test_set_pdv_changes_mode_clears_both_caches_and_requests_restart(): void {
 		WP_Stub::$caps = array( 'manage_woocommerce' => true );
 		WP_Stub::$nonce_ok = true;
-		WP_Stub::$transients = array( 'mptfwc_terminal_choices_test' => array( 'T1' ), 'mptfwc_terminal_choices_live' => array( 'T1' ) );
+		WP_Stub::$transients = array( 'mptfwc_terminal_choices_test' => array( 'T1' ), 'mptfwc_terminal_choices_live' => array( 'T1' ), 'mptfwc_terminal_rows' => array( 'T1' ) );
 		$_POST = array( 'terminal_id' => 'T1', 'nonce' => 'submitted' );
 		$this->terminals->expects( $this->once() )->method( 'set_pdv_mode' )->with( 'T1' )->willReturn( array() );
 		$result = $this->request( 'set_pdv_mode' );

@@ -15,6 +15,23 @@ class TerminalService {
 		return self::normalize( $this->client->list_terminals( 50, 0, '', '', $timeout ) );
 	}
 
+	public function cached_terminals( int $ttl = 300, int $timeout = 8 ): array {
+		$rows = get_transient( 'mptfwc_terminal_rows' );
+		if ( is_array( $rows ) && $rows ) { return $rows; }
+		try {
+			$rows = $this->list_terminals( $timeout );
+		} catch ( \Exception $e ) {
+			$last_good = get_option( 'mptfwc_terminal_rows_last_good', array() );
+			if ( $last_good ) { return $last_good; }
+			throw $e;
+		}
+		if ( $rows ) {
+			set_transient( 'mptfwc_terminal_rows', $rows, $ttl );
+			update_option( 'mptfwc_terminal_rows_last_good', $rows, false );
+		}
+		return $rows;
+	}
+
 	public static function normalize( array $response ): array {
 		$terminals = $response['data']['terminals'] ?? null;
 		if ( ! is_array( $terminals ) ) { return array(); }
@@ -37,7 +54,7 @@ class TerminalService {
 	}
 
 	public function find_terminal( string $terminal_id ): ?array {
-		foreach ( $this->list_terminals() as $terminal ) {
+		foreach ( $this->cached_terminals() as $terminal ) {
 			if ( $terminal['id'] === $terminal_id ) { return $terminal; }
 		}
 		return null;
@@ -64,6 +81,7 @@ class TerminalService {
 
 	public function set_pdv_mode( string $terminal_id ): array {
 		$response = $this->client->set_operating_mode( $terminal_id, 'PDV' );
+		delete_transient( 'mptfwc_terminal_rows' );
 		Logger::log( 'Mercado Pago terminal switched to PDV mode.', array( 'terminal_id' => $terminal_id ), 'success' );
 		return $response;
 	}

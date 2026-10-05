@@ -5,12 +5,23 @@ use WCPOS\WooCommercePOS\MercadoPagoTerminal\Gateway;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\PaymentAttempt;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\Settings;
 
+if ( ! function_exists( 'woocommerce_pos_request' ) ) {
+	function woocommerce_pos_request( ?bool $value = null ): bool {
+		static $is_pos = false;
+		if ( null !== $value ) {
+			$is_pos = $value;
+		}
+		return $is_pos;
+	}
+}
+
 class GatewayTest extends TestCase {
 	private $order;
 
 	protected function setUp(): void {
 		WP_Stub::reset();
 		$_GET = array();
+		$_POST = array();
 		$this->order = new MPTFWC_Test_Order( 123 );
 		$GLOBALS['mptfwc_orders'] = array( 123 => $this->order );
 		$GLOBALS['wp'] = (object) array( 'query_vars' => array( 'order-pay' => 123 ) );
@@ -18,6 +29,8 @@ class GatewayTest extends TestCase {
 
 	protected function tearDown(): void {
 		$_GET = array();
+		$_POST = array();
+		woocommerce_pos_request( false );
 		unset( $GLOBALS['mptfwc_orders'], $GLOBALS['wp'] );
 		WP_Stub::reset();
 	}
@@ -54,8 +67,8 @@ class GatewayTest extends TestCase {
 		$this->assertSame( 'text', $gateway->form_fields['default_terminal_id']['type'] );
 		$this->assertSame( 'Mercado Pago Terminal', $gateway->form_fields['title']['default'] );
 		$this->assertSame( 'Pay in person on a Mercado Pago Point terminal.', $gateway->form_fields['description']['default'] );
-		$this->assertSame( 'password', $gateway->form_fields['access_token']['type'] );
-		$this->assertSame( 'password', $gateway->form_fields['webhook_secret']['type'] );
+		$this->assertSame( 'mptfwc_secret', $gateway->form_fields['access_token']['type'] );
+		$this->assertSame( 'mptfwc_secret', $gateway->form_fields['webhook_secret']['type'] );
 		$this->assertSame( array( 'products', 'refunds' ), $gateway->supports );
 		$this->assertSame( array(), WP_Stub::$http_requests );
 	}
@@ -107,6 +120,7 @@ class GatewayTest extends TestCase {
 	}
 
 	public function test_process_payment_polls_unpaid_order_and_notices_when_still_at_terminal(): void {
+		WP_Stub::$checkout_pay_page = true;
 		WP_Stub::$options[ 'woocommerce_' . Settings::GATEWAY_ID . '_settings' ] = array( 'access_token' => 'TEST-token' );
 		$pending = PaymentAttempt::prepare( $this->order, 'T1', '24.00' );
 		$remote = array( 'id' => 'ORD1', 'status' => 'created', 'external_reference' => $pending['external_reference'] );
@@ -177,8 +191,9 @@ class GatewayTest extends TestCase {
 		new Gateway();
 		$this->assertCount( 2, WP_Stub::$http_requests );
 		WP_Stub::$transients['mptfwc_terminal_choices_live'] = array( 'T1' );
+		WP_Stub::$transients['mptfwc_terminal_rows'] = array( 'T1' );
 		$gateway->clear_terminal_cache();
-		$this->assertSame( array(), WP_Stub::$transients );
+		$this->assertSame( array( 'mptfwc_api_check_test' ), array_keys( WP_Stub::$transients ) );
 	}
 
 	public function test_settings_api_failure_omits_enabled_terminals_and_uses_text(): void {
@@ -190,6 +205,175 @@ class GatewayTest extends TestCase {
 		$this->assertSame( 'text', $gateway->form_fields['default_terminal_id']['type'] );
 		$this->assertArrayNotHasKey( 'enabled_terminals', $gateway->form_fields );
 		$this->assertCount( 1, WP_Stub::$http_requests );
+	}
+
+	public function test_secret_fields_render_blank_and_validate_without_losing_saved_values(): void {
+		$secrets = array( 'access_token' => 'APP_USR-1234567890123456-100512-abcdefabcdef-123456789', 'webhook_secret' => 'whsec-super-secret-value-123' );
+		WP_Stub::$options[ 'woocommerce_' . Settings::GATEWAY_ID . '_settings' ] = $secrets;
+		$gateway = new Gateway();
+		$html = $this->render( $gateway, 'admin_options' );
+		foreach ( $secrets as $key => $saved ) {
+			$this->assertStringNotContainsString( $saved, $html );
+			$this->assertStringNotContainsString( $saved, json_encode( WP_Stub::$logs ) );
+			$this->assertSame( $saved, $gateway->validate_mptfwc_secret_field( $key, " \t\n" ) );
+			$this->assertSame( 'new-secret', $gateway->validate_mptfwc_secret_field( $key, ' new-secret ' ) );
+			$this->assertStringContainsString( 'name="' . $gateway->get_field_key( $key ) . '"', $html );
+		}
+		$this->assertSame( 2, substr_count( $html, 'type="password" autocomplete="new-password"' ) );
+		$this->assertSame( 2, substr_count( $html, 'value=""' ) );
+		$this->assertStringContainsString( 'Saved (ends in 6789). Leave blank to keep.', $html );
+		$this->assertStringContainsString( 'Your integrations → Webhooks', $html );
+		$this->assertSame( array(), WP_Stub::$http_requests );
+		WP_Stub::$options = array();
+		$gateway = new Gateway();
+		$this->assertStringContainsString( 'placeholder="Paste here"', $gateway->generate_mptfwc_secret_html( 'access_token', array( 'title' => 'Token', 'placeholder' => 'Paste here' ) ) );
+	}
+
+	public function test_credential_changes_reset_health_and_caches_but_blank_unchanged_save_keeps_them(): void {
+		foreach ( array( 'access_token', 'webhook_secret', 'mode' ) as $key ) {
+			$saved = array( 'access_token' => 'TEST-token', 'webhook_secret' => 'secret', 'mode' => 'test' );
+			WP_Stub::$options[ 'woocommerce_' . Settings::GATEWAY_ID . '_settings' ] = $saved;
+			WP_Stub::$options['mptfwc_last_verified_webhook'] = 123;
+			$caches = array_fill_keys( array( 'mptfwc_api_check_test', 'mptfwc_api_check_live', 'mptfwc_terminal_choices_test', 'mptfwc_terminal_choices_live', 'mptfwc_terminal_rows' ), array( 'cached' ) );
+			WP_Stub::$transients = $caches;
+			$gateway = new Gateway();
+			$_POST = array( $gateway->get_field_key( 'access_token' ) => ' ', $gateway->get_field_key( 'webhook_secret' ) => '', $gateway->get_field_key( 'mode' ) => 'test' );
+			$this->assertFalse( $gateway->process_admin_options() );
+			$this->assertSame( $saved, WP_Stub::$options[ 'woocommerce_' . Settings::GATEWAY_ID . '_settings' ] );
+			$this->assertSame( 123, get_option( 'mptfwc_last_verified_webhook' ) );
+			$this->assertSame( $caches, WP_Stub::$transients );
+			$_POST[ $gateway->get_field_key( $key ) ] = 'mode' === $key ? 'live' : 'replacement';
+			$this->assertTrue( $gateway->process_admin_options() );
+			$this->assertFalse( get_option( 'mptfwc_last_verified_webhook' ) );
+			$this->assertSame( array(), WP_Stub::$transients );
+		}
+	}
+
+	public function test_api_check_success_is_cached_and_warns_about_mixed_credentials(): void {
+		WP_Stub::$is_admin = true;
+		$_GET['section'] = Settings::GATEWAY_ID;
+		WP_Stub::$options[ 'woocommerce_' . Settings::GATEWAY_ID . '_settings' ] = array( 'access_token' => 'TEST-token', 'mode' => 'live' );
+		WP_Stub::$transients['mptfwc_terminal_choices_live'] = array();
+		WP_Stub::$http_responses[] = array( 'response' => array( 'code' => 200 ), 'body' => file_get_contents( __DIR__ . '/../fixtures/terminals-list.json' ) );
+		$gateway = new Gateway();
+		$html = $this->render( $gateway, 'admin_options' );
+		$this->assertStringContainsString( 'OK: 2 terminal(s), 1 in PDV mode', $html );
+		$this->assertStringContainsString( 'notice notice-warning inline', $html );
+		$this->assertStringContainsString( 'Live mode is selected but the access token is a test token (TEST-…). Payments will go to the sandbox.', $html );
+		$this->assertSame( $html, $this->render( new Gateway(), 'admin_options' ) );
+		$this->assertCount( 1, WP_Stub::$http_requests );
+		$this->assertSame( 8, WP_Stub::$http_requests[0]['args']['timeout'] );
+		$this->assertSame( 60, WP_Stub::$transient_expirations['mptfwc_api_check_live'] );
+	}
+
+	public function test_api_check_errors_are_plain_escaped_redacted_and_cached(): void {
+		WP_Stub::$is_admin = true;
+		$_GET['section'] = Settings::GATEWAY_ID;
+		$token = 'APP_USR-1234567890123456-100512-abcdefabcdef-123456789';
+		WP_Stub::$options[ 'woocommerce_' . Settings::GATEWAY_ID . '_settings' ] = array( 'access_token' => $token );
+		$messages = array(
+			401 => 'Access token rejected by Mercado Pago (HTTP 401): &lt;denied&gt; ***. Copy a fresh access token from Your integrations → Credentials.',
+			403 => 'Access token is not allowed to use Point (HTTP 403): &lt;denied&gt; ***.',
+			503 => 'Could not reach Mercado Pago: &lt;denied&gt; ***',
+			0 => 'Could not reach Mercado Pago: Mercado Pago API request failed.',
+		);
+		foreach ( $messages as $status => $message ) {
+			WP_Stub::$transients = array( 'mptfwc_terminal_choices_test' => array() );
+			WP_Stub::$http_requests = array();
+			WP_Stub::$http_responses[] = $status ? array( 'response' => array( 'code' => $status ), 'body' => json_encode( array( 'message' => '<denied> ' . $token ) ) ) : new WP_Error( 'network', 'Network unavailable' );
+			$gateway = new Gateway();
+			$html = $this->render( $gateway, 'admin_options' );
+			$this->assertStringContainsString( $message, $html );
+			$this->assertStringNotContainsString( $token, $html );
+			$this->assertStringNotContainsString( $token, json_encode( WP_Stub::$logs ) );
+			$this->assertSame( $html, $this->render( $gateway, 'admin_options' ) );
+			$this->assertCount( 1, WP_Stub::$http_requests );
+			$this->assertSame( 60, WP_Stub::$transient_expirations['mptfwc_api_check_test'] );
+		}
+	}
+
+	public function test_api_check_does_not_request_outside_the_settings_screen_or_without_token(): void {
+		$gateway = new Gateway();
+		$this->assertStringContainsString( 'Not checked: no access token', $this->render( $gateway, 'admin_options' ) );
+		WP_Stub::$options[ 'woocommerce_' . Settings::GATEWAY_ID . '_settings' ] = array( 'access_token' => 'TEST-token' );
+		foreach ( array( array( false, false, Settings::GATEWAY_ID ), array( true, true, Settings::GATEWAY_ID ), array( true, false, 'other' ) ) as $context ) {
+			list( WP_Stub::$is_admin, WP_Stub::$doing_ajax, $_GET['section'] ) = $context;
+			$this->render( new Gateway(), 'admin_options' );
+		}
+		$this->assertSame( array(), WP_Stub::$http_requests );
+	}
+
+	public function test_empty_terminals_help_and_webhook_health(): void {
+		WP_Stub::$is_admin = true;
+		$_GET['section'] = Settings::GATEWAY_ID;
+		WP_Stub::$options[ 'woocommerce_' . Settings::GATEWAY_ID . '_settings' ] = array( 'access_token' => 'TEST-token', 'webhook_secret' => 'secret' );
+		WP_Stub::$transients['mptfwc_terminal_choices_test'] = array();
+		WP_Stub::$http_responses[] = array( 'response' => array( 'code' => 200 ), 'body' => '{"data":{"terminals":[]}}' );
+		$gateway = new Gateway();
+		$html = $this->render( $gateway, 'admin_options' );
+		$this->assertStringContainsString( 'OK: 0 terminal(s), 0 in PDV mode', $html );
+		$this->assertStringContainsString( 'No Point terminals are linked to this Mercado Pago account yet. On the terminal, log in with this account; it then appears here. Switch it to PDV mode and restart it before taking payments.', $html );
+		$this->assertStringContainsString( 'Last verified webhook</th><td><code>never', $html );
+		$this->assertStringContainsString( 'Mercado Pago has not sent a verified notification yet. Check the webhook URL and secret.', $html );
+		$this->assertStringNotContainsString( 'notice notice-warning inline', $html );
+		WP_Stub::$options['mptfwc_last_verified_webhook'] = 1700000000;
+		$html = $this->render( $gateway, 'admin_options' );
+		$this->assertStringContainsString( '2023-11-14 22:13:20 UTC', $html );
+		$this->assertStringNotContainsString( 'has not sent a verified notification', $html );
+	}
+
+	public function test_storefront_redirects_unpaid_order_to_order_pay(): void {
+		$GLOBALS['wp']->query_vars = array();
+		$this->assertSame( array( 'result' => 'success', 'redirect' => '/checkout/order-pay/123/?key=key' ), ( new Gateway() )->process_payment( 123 ) );
+		$this->assertSame( array(), WP_Stub::$notices );
+		$this->assertSame( array(), WP_Stub::$http_requests );
+		$this->assertFalse( $this->order->is_paid() );
+	}
+
+	public function test_pos_unpaid_order_polls_and_notices(): void {
+		$GLOBALS['wp']->query_vars = array();
+		woocommerce_pos_request( true );
+		WP_Stub::$options[ 'woocommerce_' . Settings::GATEWAY_ID . '_settings' ] = array( 'access_token' => 'TEST-token' );
+		$pending = PaymentAttempt::prepare( $this->order, 'T1', '24.00' );
+		$remote = array( 'id' => 'ORD1', 'status' => 'created', 'external_reference' => $pending['external_reference'] );
+		PaymentAttempt::record_created( $this->order, $pending, $remote );
+		$remote['status'] = 'at_terminal';
+		WP_Stub::$http_responses[] = array( 'response' => array( 'code' => 200 ), 'body' => json_encode( $remote ) );
+		$this->assertSame( array( 'result' => 'failure' ), ( new Gateway() )->process_payment( 123 ) );
+		$this->assertCount( 1, WP_Stub::$http_requests );
+		$this->assertCount( 1, WP_Stub::$notices );
+		$this->assertSame( 'notice', WP_Stub::$notices[0]['type'] );
+		$this->assertFalse( $this->order->is_paid() );
+	}
+
+	public function test_order_pay_post_unpaid_order_polls_and_notices(): void {
+		$GLOBALS['wp']->query_vars = array();
+		$_POST['woocommerce_pay'] = '1';
+		WP_Stub::$options[ 'woocommerce_' . Settings::GATEWAY_ID . '_settings' ] = array( 'access_token' => 'TEST-token' );
+		$pending = PaymentAttempt::prepare( $this->order, 'T1', '24.00' );
+		$remote = array( 'id' => 'ORD1', 'status' => 'created', 'external_reference' => $pending['external_reference'] );
+		PaymentAttempt::record_created( $this->order, $pending, $remote );
+		$remote['status'] = 'at_terminal';
+		WP_Stub::$http_responses[] = array( 'response' => array( 'code' => 200 ), 'body' => json_encode( $remote ) );
+		$this->assertSame( array( 'result' => 'failure' ), ( new Gateway() )->process_payment( 123 ) );
+		$this->assertCount( 1, WP_Stub::$http_requests );
+		$this->assertCount( 1, WP_Stub::$notices );
+		$this->assertSame( 'notice', WP_Stub::$notices[0]['type'] );
+		$this->assertFalse( $this->order->is_paid() );
+	}
+
+	public function test_order_pay_query_var_unpaid_order_polls_and_notices(): void {
+		WP_Stub::$options[ 'woocommerce_' . Settings::GATEWAY_ID . '_settings' ] = array( 'access_token' => 'TEST-token' );
+		$pending = PaymentAttempt::prepare( $this->order, 'T1', '24.00' );
+		$remote = array( 'id' => 'ORD1', 'status' => 'created', 'external_reference' => $pending['external_reference'] );
+		PaymentAttempt::record_created( $this->order, $pending, $remote );
+		$remote['status'] = 'at_terminal';
+		WP_Stub::$http_responses[] = array( 'response' => array( 'code' => 200 ), 'body' => json_encode( $remote ) );
+		$this->assertSame( array( 'result' => 'failure' ), ( new Gateway() )->process_payment( 123 ) );
+		$this->assertCount( 1, WP_Stub::$http_requests );
+		$this->assertCount( 1, WP_Stub::$notices );
+		$this->assertSame( 'notice', WP_Stub::$notices[0]['type'] );
+		$this->assertFalse( $this->order->is_paid() );
 	}
 
 	public function test_bootstrap_registers_gateway_and_ajax_handlers(): void {

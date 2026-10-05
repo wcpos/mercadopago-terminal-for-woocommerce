@@ -2,6 +2,7 @@
 namespace WCPOS\WooCommercePOS\MercadoPagoTerminal;
 
 use WC_Payment_Gateway;
+use WCPOS\WooCommercePOS\MercadoPagoTerminal\Services\MercadoPagoApiException;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\Services\MercadoPagoClient;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\Services\PointPaymentService;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\Services\TerminalService;
@@ -45,9 +46,9 @@ class Gateway extends WC_Payment_Gateway {
 			'title' => array( 'title' => __( 'Title', 'mercadopago-terminal-for-woocommerce' ), 'type' => 'text', 'default' => __( 'Mercado Pago Terminal', 'mercadopago-terminal-for-woocommerce' ) ),
 			'description' => array( 'title' => __( 'Description', 'mercadopago-terminal-for-woocommerce' ), 'type' => 'textarea', 'default' => __( 'Pay in person on a Mercado Pago Point terminal.', 'mercadopago-terminal-for-woocommerce' ) ),
 			'mode' => array( 'title' => __( 'Mode', 'mercadopago-terminal-for-woocommerce' ), 'type' => 'select', 'default' => 'test', 'options' => array( 'test' => __( 'Test', 'mercadopago-terminal-for-woocommerce' ), 'live' => __( 'Live', 'mercadopago-terminal-for-woocommerce' ) ), 'description' => __( "Test credentials drive Mercado Pago's sandbox virtual terminal. Live credentials drive real terminals.", 'mercadopago-terminal-for-woocommerce' ) ),
-			'access_token' => array( 'title' => __( 'Access token', 'mercadopago-terminal-for-woocommerce' ), 'type' => 'password', 'default' => '', 'description' => __( 'The access token from your application under Mercado Pago → Your integrations → Credentials.', 'mercadopago-terminal-for-woocommerce' ) ),
+			'access_token' => array( 'title' => __( 'Access token', 'mercadopago-terminal-for-woocommerce' ), 'type' => 'mptfwc_secret', 'default' => '', 'description' => __( 'The access token from your application under Mercado Pago → Your integrations → Credentials.', 'mercadopago-terminal-for-woocommerce' ) ),
 			'webhook_secret' => array(
-				'title' => __( 'Webhook secret', 'mercadopago-terminal-for-woocommerce' ), 'type' => 'password', 'default' => '',
+				'title' => __( 'Webhook secret', 'mercadopago-terminal-for-woocommerce' ), 'type' => 'mptfwc_secret', 'default' => '',
 				/* translators: %s: webhook URL. */
 				'description' => sprintf( __( 'Add %s under Your integrations → Webhooks with the "Order (Mercado Pago)" event, then paste the secret signature here.', 'mercadopago-terminal-for-woocommerce' ), esc_url( ( new Settings() )->webhook_url() ) ),
 			),
@@ -80,6 +81,34 @@ class Gateway extends WC_Payment_Gateway {
 			'default'     => 'debug',
 			'description' => __( 'Written to WooCommerce → Status → Logs (source: mercadopago-terminal). Debug records every Mercado Pago request and response with secrets removed.', 'mercadopago-terminal-for-woocommerce' ),
 		);
+	}
+
+	public function generate_mptfwc_secret_html( $key, $data ) {
+		$field_key = $this->get_field_key( $key );
+		$saved = (string) $this->get_option( $key );
+		$placeholder = '' !== $saved ? sprintf( __( 'Saved (ends in %s). Leave blank to keep.', 'mercadopago-terminal-for-woocommerce' ), substr( $saved, -4 ) ) : ( $data['placeholder'] ?? '' );
+		return '<tr valign="top"><th scope="row" class="titledesc"><label for="' . esc_attr( $field_key ) . '">' . esc_html( $data['title'] ) . '</label></th>'
+			. '<td class="forminp"><fieldset><legend class="screen-reader-text"><span>' . esc_html( $data['title'] ) . '</span></legend>'
+			. '<input class="input-text regular-input" type="password" autocomplete="new-password" name="' . esc_attr( $field_key ) . '" id="' . esc_attr( $field_key ) . '" value="" placeholder="' . esc_attr( $placeholder ) . '" />'
+			. '<p class="description">' . wp_kses_post( $data['description'] ?? '' ) . '</p></fieldset></td></tr>';
+	}
+
+	public function validate_mptfwc_secret_field( $key, $value ) {
+		$value = trim( (string) $value );
+		return '' === $value ? $this->get_option( $key ) : $value;
+	}
+
+	public function process_admin_options() {
+		$before = array( $this->get_option( 'access_token' ), $this->get_option( 'webhook_secret' ), $this->get_option( 'mode' ) );
+		$result = parent::process_admin_options();
+		$after = array( $this->get_option( 'access_token' ), $this->get_option( 'webhook_secret' ), $this->get_option( 'mode' ) );
+		if ( $before !== $after ) {
+			delete_option( 'mptfwc_last_verified_webhook' );
+			delete_transient( 'mptfwc_api_check_test' );
+			delete_transient( 'mptfwc_api_check_live' );
+			$this->clear_terminal_cache();
+		}
+		return $result;
 	}
 
 	/**
@@ -168,8 +197,46 @@ class Gateway extends WC_Payment_Gateway {
 	public function admin_options(): void {
 		parent::admin_options();
 		$settings = new Settings();
+		$check = array( 'message' => __( 'Not checked: no access token', 'mercadopago-terminal-for-woocommerce' ) );
+		if ( '' !== $settings->access_token() ) {
+			$check['message'] = __( 'Not checked: outside gateway settings', 'mercadopago-terminal-for-woocommerce' );
+			$section = isset( $_GET['section'] ) ? sanitize_text_field( wp_unslash( $_GET['section'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( is_admin() && ! wp_doing_ajax() && Settings::GATEWAY_ID === $section ) {
+				$cache_key = 'mptfwc_api_check_' . $settings->mode();
+				$check = get_transient( $cache_key );
+				if ( false === $check ) {
+					try {
+						$terminals = ( new TerminalService( new MercadoPagoClient( $settings->access_token() ), $settings ) )->list_terminals( 8 );
+						$pdv = count( array_filter( $terminals, static function ( $terminal ) { return 'PDV' === strtoupper( $terminal['operating_mode'] ); } ) );
+						$check = array( 'terminals' => $terminals, 'message' => sprintf( __( 'OK: %1$d terminal(s), %2$d in PDV mode', 'mercadopago-terminal-for-woocommerce' ), count( $terminals ), $pdv ) );
+					} catch ( \Exception $e ) {
+						$message = Logger::redact( str_replace( array_filter( array( $settings->access_token(), $settings->webhook_secret() ) ), '***', $e->getMessage() ) );
+						$status = $e instanceof MercadoPagoApiException ? $e->http_status() : 0;
+						if ( 401 === $status ) {
+							$message = sprintf( __( 'Access token rejected by Mercado Pago (HTTP 401): %s. Copy a fresh access token from Your integrations → Credentials.', 'mercadopago-terminal-for-woocommerce' ), $message );
+						} elseif ( 403 === $status ) {
+							$message = sprintf( __( 'Access token is not allowed to use Point (HTTP 403): %s.', 'mercadopago-terminal-for-woocommerce' ), $message );
+						} else {
+							$message = sprintf( __( 'Could not reach Mercado Pago: %s', 'mercadopago-terminal-for-woocommerce' ), $message );
+						}
+						$check = array( 'message' => $message );
+					}
+					set_transient( $cache_key, $check, 60 );
+				}
+			}
+		}
 		echo '<h2>' . esc_html__( 'Mercado Pago Terminal diagnostics', 'mercadopago-terminal-for-woocommerce' ) . '</h2>';
+		if ( 'live' === $settings->mode() && 0 === strpos( $settings->access_token(), 'TEST-' ) ) {
+			echo '<div class="notice notice-warning inline"><p>' . esc_html__( 'Live mode is selected but the access token is a test token (TEST-…). Payments will go to the sandbox.', 'mercadopago-terminal-for-woocommerce' ) . '</p></div>';
+		}
 		echo '<table class="form-table"><tbody>';
+		$this->row( __( 'Mercado Pago API', 'mercadopago-terminal-for-woocommerce' ), $check['message'] );
+		$ts = get_option( 'mptfwc_last_verified_webhook', 0 );
+		$webhook_health = $ts ? gmdate( 'Y-m-d H:i:s', $ts ) . ' UTC' : __( 'never', 'mercadopago-terminal-for-woocommerce' );
+		if ( ! $ts && '' !== $settings->webhook_secret() ) {
+			$webhook_health .= ' — ' . __( 'Mercado Pago has not sent a verified notification yet. Check the webhook URL and secret.', 'mercadopago-terminal-for-woocommerce' );
+		}
+		$this->row( __( 'Last verified webhook', 'mercadopago-terminal-for-woocommerce' ), $webhook_health );
 		$this->row( __( 'Active environment', 'mercadopago-terminal-for-woocommerce' ), $settings->mode() );
 		$this->row( __( 'Access token', 'mercadopago-terminal-for-woocommerce' ), '' !== $settings->access_token() ? __( 'configured', 'mercadopago-terminal-for-woocommerce' ) : __( 'MISSING', 'mercadopago-terminal-for-woocommerce' ) );
 		$this->row( __( 'Webhook secret', 'mercadopago-terminal-for-woocommerce' ), '' !== $settings->webhook_secret() ? __( 'configured', 'mercadopago-terminal-for-woocommerce' ) : __( 'MISSING — webhook signatures are not verified', 'mercadopago-terminal-for-woocommerce' ) );
@@ -187,13 +254,13 @@ class Gateway extends WC_Payment_Gateway {
 		echo '<p>' . esc_html__( 'When something goes wrong, download the support bundle and attach it to your support request. It contains your settings (secrets masked), environment, terminals, recent payment attempts and the plugin\'s recent log.', 'mercadopago-terminal-for-woocommerce' ) . '</p>';
 		echo '<p><a class="button" href="' . esc_url( SupportBundle::url() ) . '">' . esc_html__( 'Download support bundle', 'mercadopago-terminal-for-woocommerce' ) . '</a> ';
 		echo '<a href="' . esc_url( admin_url( 'admin.php?page=wc-status&tab=logs&source=mercadopago-terminal' ) ) . '">' . esc_html__( 'View logs', 'mercadopago-terminal-for-woocommerce' ) . '</a></p>';
-		if ( null === $this->fetch_terminal_options() ) { return; }
-		try {
-			$terminals = ( new TerminalService( new MercadoPagoClient( $settings->access_token() ), $settings ) )->list_terminals( 8 );
-		} catch ( \Exception $e ) {
+		if ( ! isset( $check['terminals'] ) ) { return; }
+		$terminals = $check['terminals'];
+		echo '<h2>' . esc_html__( 'Terminals', 'mercadopago-terminal-for-woocommerce' ) . '</h2>';
+		if ( ! $terminals ) {
+			echo '<p>' . esc_html__( 'No Point terminals are linked to this Mercado Pago account yet. On the terminal, log in with this account; it then appears here. Switch it to PDV mode and restart it before taking payments.', 'mercadopago-terminal-for-woocommerce' ) . '</p>';
 			return;
 		}
-		echo '<h2>' . esc_html__( 'Terminals', 'mercadopago-terminal-for-woocommerce' ) . '</h2>';
 		echo '<table class="widefat" data-nonce="' . esc_attr( wp_create_nonce( 'mptfwc_admin_actions' ) ) . '"><thead><tr>';
 		foreach ( array( __( 'ID', 'mercadopago-terminal-for-woocommerce' ), __( 'Label', 'mercadopago-terminal-for-woocommerce' ), __( 'Operating mode', 'mercadopago-terminal-for-woocommerce' ), __( 'Action', 'mercadopago-terminal-for-woocommerce' ) ) as $heading ) {
 			echo '<th>' . esc_html( $heading ) . '</th>';
@@ -310,7 +377,7 @@ class Gateway extends WC_Payment_Gateway {
 	public function clear_terminal_cache(): void {
 		delete_transient( 'mptfwc_terminal_choices_test' );
 		delete_transient( 'mptfwc_terminal_choices_live' );
-
+		delete_transient( 'mptfwc_terminal_rows' );
 	}
 	private function row( string $label, string $value ): void { echo '<tr><th>' . esc_html( $label ) . '</th><td><code>' . esc_html( $value ) . '</code></td></tr>'; }
 	public function enqueue_admin_scripts(): void {
@@ -371,6 +438,9 @@ class Gateway extends WC_Payment_Gateway {
 			return array( 'result' => 'failure' );
 		}
 		if ( ! $order->is_paid() ) {
+			if ( $this->is_storefront_checkout() ) {
+				return array( 'result' => 'success', 'redirect' => $order->get_checkout_payment_url( true ) );
+			}
 			try {
 				$settings = new Settings();
 				$service  = new PointPaymentService( new MercadoPagoClient( $settings->access_token() ), $settings );
@@ -390,5 +460,12 @@ class Gateway extends WC_Payment_Gateway {
 		}
 		wc_add_notice( __( 'This order has not been paid yet. Start the payment above and wait for Mercado Pago to confirm — the order finishes on its own. If the customer has already paid, give it a few seconds and try again.', 'mercadopago-terminal-for-woocommerce' ), 'notice' );
 		return array( 'result' => 'failure' );
+	}
+
+	private function is_storefront_checkout(): bool {
+		return ! ( function_exists( 'woocommerce_pos_request' ) && woocommerce_pos_request() )
+			&& ! ( function_exists( 'is_checkout_pay_page' ) && is_checkout_pay_page() )
+			&& ( ! isset( $GLOBALS['wp'] ) || empty( $GLOBALS['wp']->query_vars['order-pay'] ) )
+			&& ! array_key_exists( 'woocommerce_pay', $_POST );
 	}
 }
