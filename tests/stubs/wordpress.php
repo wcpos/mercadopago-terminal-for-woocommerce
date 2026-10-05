@@ -48,6 +48,12 @@ if ( ! class_exists( 'WP_Stub_Json_Exit' ) ) { class WP_Stub_Json_Exit extends E
 if ( ! function_exists( 'wp_doing_ajax' ) ) { function wp_doing_ajax() { return WP_Stub::$doing_ajax; } }
 if ( ! function_exists( 'current_user_can' ) ) { function current_user_can( $cap, ...$args ) { return ! empty( WP_Stub::$caps[ $cap ] ); } }
 if ( ! function_exists( 'check_ajax_referer' ) ) { function check_ajax_referer( $action, $query_arg = false, $stop = true ) { return WP_Stub::$nonce_ok; } }
+if ( ! function_exists( 'check_admin_referer' ) ) { function check_admin_referer( $action = -1, $query_arg = '_wpnonce' ) { return WP_Stub::$nonce_ok; } }
+if ( ! function_exists( 'wp_nonce_url' ) ) { function wp_nonce_url( $url, $action = -1 ) { return esc_html( add_query_arg( array( '_wpnonce' => wp_create_nonce( $action ) ), $url ) ); } }
+if ( ! function_exists( 'nocache_headers' ) ) { function nocache_headers() {} }
+if ( ! function_exists( 'home_url' ) ) { function home_url( $path = '' ) { return get_home_url( null, $path ); } }
+if ( ! function_exists( 'wp_timezone_string' ) ) { function wp_timezone_string() { return 'UTC'; } }
+if ( ! function_exists( 'get_current_user_id' ) ) { function get_current_user_id() { return 1; } }
 if ( ! function_exists( 'wp_send_json_success' ) ) {
 	function wp_send_json_success( $data = null, $status_code = null ) {
 		WP_Stub::$json = array( 'success' => true, 'data' => $data, 'code' => $status_code ?? 200 );

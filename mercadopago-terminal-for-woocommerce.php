@@ -64,6 +64,7 @@ function init(): void {
 	add_action( 'woocommerce_create_refund', array( RefundHandler::class, 'remember_refund' ), 10, 2 );
 	new AjaxHandler();
 	new WebhookHandler();
+	( new SupportBundle() )->register();
 	do_action( 'mptfwc_init' );
 }
 add_action( 'plugins_loaded', __NAMESPACE__ . '\\init', 11 );

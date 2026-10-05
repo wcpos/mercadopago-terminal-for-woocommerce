@@ -36,6 +36,15 @@ class GatewayTest extends TestCase {
 		$this->assertContains( 'refunds', ( new Gateway() )->supports );
 	}
 
+	public function test_admin_options_include_support_download_without_terminals(): void {
+		$html = $this->render( new Gateway(), 'admin_options' );
+		$this->assertStringContainsString( 'Download support bundle', $html );
+		$this->assertStringContainsString( 'admin-post.php?action=mptfwc_support_bundle', $html );
+		$this->assertStringContainsString( '_wpnonce=nonce-mptfwc_support_bundle', $html );
+		$this->assertStringContainsString( 'source=mercadopago-terminal', $html );
+		$this->assertStringContainsString( 'View logs', $html );
+	}
+
 	public function test_form_fields_without_a_settings_screen_use_a_text_terminal_field(): void {
 		$gateway = new Gateway();
 		$this->assertSame( array( 'enabled', 'title', 'description', 'mode', 'access_token', 'webhook_secret', 'default_terminal_id', 'lock_terminal', 'show_logs', 'log_level' ), array_keys( $gateway->form_fields ) );
@@ -189,5 +198,7 @@ class GatewayTest extends TestCase {
 		$this->assertSame( array( 'existing', Gateway::class ), apply_filters( 'woocommerce_payment_gateways', array( 'existing' ) ) );
 		$this->assertContains( 'wp_ajax_nopriv_mptfwc_start_payment', array_column( WP_Stub::$actions, 'hook' ) );
 		$this->assertContains( 'wp_ajax_mptfwc_webhook', array_column( WP_Stub::$actions, 'hook' ) );
+		$this->assertContains( 'admin_post_mptfwc_support_bundle', array_column( WP_Stub::$actions, 'hook' ) );
+		$this->assertNotContains( 'admin_post_nopriv_mptfwc_support_bundle', array_column( WP_Stub::$actions, 'hook' ) );
 	}
 }
