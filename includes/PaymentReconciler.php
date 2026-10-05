@@ -81,6 +81,7 @@ class PaymentReconciler {
 	}
 
 	private function apply( $order, array $mp_order, string $source ): array {
+		$previous_status = PaymentAttempt::find( $order, $mp_order )['status'] ?? '';
 		PaymentAttempt::update_status( $order, $mp_order );
 		$status = PaymentAttempt::status( $mp_order );
 		$verification = $this->verify( $order, $mp_order );
@@ -95,12 +96,12 @@ class PaymentReconciler {
 		}
 		if ( PaymentAttempt::is_final_unpaid( $status ) ) {
 			$status_detail = (string) ( $mp_order['status_detail'] ?? '' );
-			$order->add_order_note( sprintf( 'Mercado Pago Point order %s via %s (%s).', $status, $source, $status_detail ) );
+			if ( $previous_status !== $status ) { $order->add_order_note( sprintf( 'Mercado Pago Point order %s via %s (%s).', $status, $source, $status_detail ) ); }
 			$order->save();
 			return array( 'status' => $status, 'status_detail' => $status_detail, 'retry_allowed' => true );
 		}
 		if ( 'refunded' === $status ) {
-			$order->add_order_note( sprintf( 'Mercado Pago Point order refunded via %s.', $source ) );
+			if ( $previous_status !== $status ) { $order->add_order_note( sprintf( 'Mercado Pago Point order refunded via %s.', $source ) ); }
 			$order->save();
 			return array( 'status' => 'refunded', 'retry_allowed' => false );
 		}

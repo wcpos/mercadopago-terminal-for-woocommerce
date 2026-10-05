@@ -63,7 +63,7 @@ class WebhookHandler {
 			$result = ( new PaymentReconciler( $settings ) )->reconcile( $order, $mp_order, 'webhook' );
 			Logger::log( 'Mercado Pago webhook reconciled', array( 'mp_order_id' => $data_id, 'order_id' => $order->get_id(), 'status' => $result['status'], 'duration_ms' => Logger::elapsed_ms( $start ) ), 'info' );
 			return array( 'code' => 200, 'body' => 'OK' );
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			Logger::log( $e->getMessage(), array( 'mp_order_id' => $data_id, 'duration_ms' => Logger::elapsed_ms( $start ) ), 'error' );
 			return array( 'code' => 500, 'body' => 'Error' );
 		}

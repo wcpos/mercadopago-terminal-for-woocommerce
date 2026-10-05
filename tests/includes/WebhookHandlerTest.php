@@ -140,4 +140,11 @@ class WebhookHandlerTest extends TestCase {
 			$this->assertSame( array( $this->handler, 'handle' ), $action['callback'] );
 		}
 	}
+
+	public function test_php_type_error_returns_clean_500(): void {
+		$this->client->returns['get_order'] = array( new TypeError( 'Invalid response' ) );
+		$this->assertSame( array( 'code' => 500, 'body' => 'Error' ), $this->handler->process( $this->body, $this->signature, self::REQUEST_ID, array() ) );
+		$this->assertSame( 0, $this->order->payment_complete_calls );
+		$this->assertSame( 'error', end( WP_Stub::$logs )['level'] );
+	}
 }

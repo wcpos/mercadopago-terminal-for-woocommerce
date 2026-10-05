@@ -169,4 +169,16 @@ class PaymentReconcilerTest extends TestCase {
 		$this->assertSame( 0, $this->order->payment_complete_calls );
 		$this->assertTrue( $this->order->is_paid() );
 	}
+
+	public function test_repeated_final_unpaid_and_refunded_statuses_do_not_duplicate_notes(): void {
+		foreach ( array( 'canceled', 'refunded' ) as $status ) {
+			$remote = array_replace( $this->fixture( 'order-canceled' ), array( 'status' => $status ) );
+			$this->order->notes = array();
+			$first = $this->reconciler->reconcile( $this->order, $remote, 'webhook' );
+			$this->assertSame( $first, $this->reconciler->reconcile( $this->order, $remote, 'poll' ) );
+			$this->assertSame( $status, $first['status'] );
+			$this->assertCount( 1, $this->order->notes );
+			$this->assertStringContainsString( 'via webhook', $this->order->notes[0] );
+		}
+	}
 }
