@@ -9,7 +9,8 @@
   "config": {"platform": {"php": "7.4"}, "platform-check": false, "sort-packages": true},
   "scripts": {
     "lint": "find . -path ./vendor -prune -o -path ./.worktrees -prune -o -name '*.php' -print -exec php -l {} \\;",
-    "test": "phpunit --configuration phpunit.xml.dist"
+    "test": "phpunit --configuration phpunit.xml.dist",
+    "test:js": "node tests/js/payment.test.js"
   },
   "autoload": {"psr-4": {"WCPOS\\WooCommercePOS\\MercadoPagoTerminal\\": "includes/"}}
 }

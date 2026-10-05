@@ -32,6 +32,10 @@ class GatewayTest extends TestCase {
 		}
 	}
 
+	public function test_supports_refunds(): void {
+		$this->assertContains( 'refunds', ( new Gateway() )->supports );
+	}
+
 	public function test_form_fields_without_a_settings_screen_use_a_text_terminal_field(): void {
 		$gateway = new Gateway();
 		$this->assertSame( array( 'enabled', 'title', 'description', 'mode', 'access_token', 'webhook_secret', 'default_terminal_id', 'lock_terminal', 'show_logs' ), array_keys( $gateway->form_fields ) );
@@ -40,7 +44,7 @@ class GatewayTest extends TestCase {
 		$this->assertSame( 'Pay in person on a Mercado Pago Point terminal.', $gateway->form_fields['description']['default'] );
 		$this->assertSame( 'password', $gateway->form_fields['access_token']['type'] );
 		$this->assertSame( 'password', $gateway->form_fields['webhook_secret']['type'] );
-		$this->assertSame( array( 'products' ), $gateway->supports );
+		$this->assertSame( array( 'products', 'refunds' ), $gateway->supports );
 		$this->assertSame( array(), WP_Stub::$http_requests );
 	}
 

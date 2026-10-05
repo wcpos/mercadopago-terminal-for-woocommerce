@@ -17,6 +17,10 @@ class FakeMercadoPagoClient extends \WCPOS\WooCommercePOS\MercadoPagoTerminal\Se
 		return $this->respond( __FUNCTION__, func_get_args() );
 	}
 
+	public function refund_order( string $order_id, string $idempotency_key, ?array $payload = null ): array {
+		return $this->respond( __FUNCTION__, func_get_args() );
+	}
+
 	public function list_terminals( int $limit = 50, int $offset = 0, string $store_id = '', string $pos_id = '', int $timeout = 0 ): array {
 		return $this->respond( __FUNCTION__, func_get_args() );
 	}
