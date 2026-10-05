@@ -8,7 +8,7 @@ class BootstrapTest extends TestCase {
 
 	public function test_constants_define_version_and_minimum_php(): void {
 		$this->assertTrue( defined( 'MPTFWC_VERSION' ) );
-		$this->assertSame( '0.0.1', MPTFWC_VERSION );
+		$this->assertSame( '0.1.0', MPTFWC_VERSION );
 		$this->assertTrue( defined( 'MPTFWC_MINIMUM_PHP_VERSION_ID' ) );
 		$this->assertSame( 70400, MPTFWC_MINIMUM_PHP_VERSION_ID );
 	}
