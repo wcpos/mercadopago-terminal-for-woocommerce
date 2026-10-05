@@ -29,6 +29,7 @@ class PaymentAttempt {
 	public static function prepare( $order, string $terminal_id, string $amount ): array {
 		$pending = $order->get_meta( self::META_PENDING_CREATE );
 		if ( is_array( $pending ) && ( $pending['terminal_id'] ?? '' ) === $terminal_id && ( $pending['amount'] ?? '' ) === $amount && time() - strtotime( $pending['created_at'] ?? '' ) < self::PENDING_REUSE_SECONDS ) {
+			Logger::log( 'Payment attempt reused after an earlier failed create', array( 'order_id' => $order->get_id() ) + $pending, 'info' );
 			return $pending;
 		}
 		$attempt_id = function_exists( 'wp_generate_uuid4' ) ? wp_generate_uuid4() : uniqid( 'mptfwc_', true );
@@ -54,6 +55,7 @@ class PaymentAttempt {
 		);
 		$order->update_meta_data( self::META_ATTEMPTS, $history );
 		$order->save();
+		Logger::log( 'Payment attempt prepared', array( 'order_id' => $order->get_id() ) + $pending, 'info' );
 		return $pending;
 	}
 
@@ -76,9 +78,11 @@ class PaymentAttempt {
 		$order->update_meta_data( self::META_ATTEMPTS, $history );
 		$order->delete_meta_data( self::META_PENDING_CREATE );
 		$order->save();
+		Logger::log( 'Mercado Pago order created', array( 'order_id' => $order->get_id(), 'attempt_id' => $pending['attempt_id'], 'mp_order_id' => $mp_order['id'], 'status' => $status ), 'info' );
 	}
 
 	public static function discard_pending( $order, array $pending ): void {
+		Logger::log( 'Payment attempt rejected by Mercado Pago; key discarded', array( 'order_id' => $order->get_id(), 'attempt_id' => $pending['attempt_id'] ), 'warning' );
 		$order->delete_meta_data( self::META_PENDING_CREATE );
 		$history = self::history( $order );
 		foreach ( $history as &$attempt ) {
@@ -99,6 +103,9 @@ class PaymentAttempt {
 		$history = self::history( $order );
 		foreach ( $history as &$attempt ) {
 			if ( $attempt['mp_order_id'] === $mp_order['id'] || ( '' === $attempt['mp_order_id'] && $attempt['external_reference'] === ( $mp_order['external_reference'] ?? '' ) ) ) {
+				if ( $attempt['status'] !== $status ) {
+					Logger::log( 'Payment status changed', array( 'order_id' => $order->get_id(), 'mp_order_id' => $mp_order['id'], 'from' => $attempt['status'], 'to' => $status, 'status_detail' => $mp_order['status_detail'] ?? '' ), 'info' );
+				}
 				$attempt['mp_order_id'] = $mp_order['id'];
 				$attempt['status'] = $status;
 				$attempt['updated_at'] = gmdate( 'c' );

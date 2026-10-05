@@ -11,6 +11,14 @@ if ( ! function_exists( 'wcpos_get_settings' ) ) {
 class SettingsTest extends TestCase {
 	public static $pos_settings = array();
 
+	public function test_log_level_defaults_to_debug_and_respects_valid_levels(): void {
+		$this->assertSame( 'debug', ( new Settings( array() ) )->log_level() );
+		foreach ( array( 'invalid' => 'debug', '' => 'debug', 'debug' => 'debug', 'off' => 'off', 'errors' => 'errors' ) as $input => $expected ) {
+			$this->assertSame( $expected, ( new Settings( array( 'log_level' => $input ) ) )->log_level() );
+		}
+		$this->assertSame( 'debug', ( new Settings( array( 'log_level' => array() ) ) )->log_level() );
+	}
+
 	protected function setUp(): void {
 		WP_Stub::reset();
 		self::$pos_settings = array();

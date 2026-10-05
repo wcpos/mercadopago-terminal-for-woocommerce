@@ -20,24 +20,31 @@ class WebhookHandler {
 	}
 
 	public function process( string $raw_body, string $signature, string $request_id, array $query ): array {
+		$start = Logger::timer();
 		$body = json_decode( $raw_body, true );
+		$log_body = is_array( $body ) ? $body : $raw_body;
 		$body = is_array( $body ) ? $body : array();
 		$data_id = $body['data']['id'] ?? '';
 		$data_id = sanitize_text_field( is_string( $data_id ) && '' !== $data_id ? $data_id : ( $query['data_id'] ?? '' ) );
+		$sig = WebhookSignature::parse_header( $signature );
+		Logger::log( 'Mercado Pago webhook received', array( 'body' => $log_body, 'query' => $query, 'x_request_id' => $request_id, 'sig_ts' => $sig['ts'] ?? '', 'sig_present' => '' !== ( $sig['v1'] ?? '' ), 'data_id' => $data_id ), 'debug' );
 		$settings = new Settings();
 		$secret = $settings->webhook_secret();
 		if ( '' !== $secret && ! WebhookSignature::verify( $signature, $request_id, $data_id, $secret ) ) {
-			Logger::log( 'Mercado Pago webhook signature is invalid.', array(), 'warning' );
+			Logger::log( 'Mercado Pago webhook signature invalid', array( 'ts' => $sig['ts'] ?? '', 'data_id' => $data_id, 'manifest' => WebhookSignature::manifest( $data_id, $request_id, (string) ( $sig['ts'] ?? '' ) ), 'x_request_id' => $request_id ), 'warning' );
 			return array( 'code' => 401, 'body' => 'Invalid signature' );
 		}
 		if ( '' === $secret ) {
-			Logger::log( 'Mercado Pago webhook signature was not verified: no webhook secret configured.', array(), 'warning' );
+			Logger::log( 'Mercado Pago webhook signature not verified: no webhook secret configured', array(), 'warning' );
+		} else {
+			Logger::log( 'Mercado Pago webhook signature valid', array(), 'debug' );
 		}
 		if ( array_key_exists( 'type', $body ) && 'order' !== $body['type'] ) {
+			Logger::log( 'Mercado Pago webhook ignored type ' . $body['type'], array( 'order_id' => 0, 'mp_order_id' => $data_id, 'status' => $body['data']['status'] ?? '', 'duration_ms' => Logger::elapsed_ms( $start ) ), 'debug' );
 			return array( 'code' => 200, 'body' => 'Ignored' );
 		}
 		if ( '' === $data_id ) {
-			Logger::log( 'Mercado Pago webhook received without order ID.', array(), 'warning' );
+			Logger::log( 'Mercado Pago webhook received without order ID.', array( 'order_id' => 0, 'mp_order_id' => '', 'status' => '', 'duration_ms' => Logger::elapsed_ms( $start ) ), 'warning' );
 			return array( 'code' => 200, 'body' => 'OK' );
 		}
 		try {
@@ -50,14 +57,14 @@ class WebhookHandler {
 				$order = $orders[0] ?? null;
 			}
 			if ( ! $order ) {
-				Logger::log( 'Mercado Pago webhook received for unknown order.', array( 'mp_order_id' => $data_id ), 'warning' );
+				Logger::log( 'Mercado Pago webhook unknown order', array( 'order_id' => $order_id, 'mp_order_id' => $data_id, 'status' => PaymentAttempt::status( $mp_order ), 'duration_ms' => Logger::elapsed_ms( $start ) ), 'warning' );
 				return array( 'code' => 200, 'body' => 'OK' );
 			}
 			$result = ( new PaymentReconciler( $settings ) )->reconcile( $order, $mp_order, 'webhook' );
-			Logger::log( 'Mercado Pago webhook reconciled.', array( 'mp_order_id' => $data_id, 'order_id' => $order_id, 'status' => $result['status'] ), 'info' );
+			Logger::log( 'Mercado Pago webhook reconciled', array( 'mp_order_id' => $data_id, 'order_id' => $order->get_id(), 'status' => $result['status'], 'duration_ms' => Logger::elapsed_ms( $start ) ), 'info' );
 			return array( 'code' => 200, 'body' => 'OK' );
 		} catch ( \Exception $e ) {
-			Logger::log( $e->getMessage(), array(), 'error' );
+			Logger::log( $e->getMessage(), array( 'mp_order_id' => $data_id, 'duration_ms' => Logger::elapsed_ms( $start ) ), 'error' );
 			return array( 'code' => 500, 'body' => 'Error' );
 		}
 	}

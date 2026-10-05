@@ -38,7 +38,10 @@ class GatewayTest extends TestCase {
 
 	public function test_form_fields_without_a_settings_screen_use_a_text_terminal_field(): void {
 		$gateway = new Gateway();
-		$this->assertSame( array( 'enabled', 'title', 'description', 'mode', 'access_token', 'webhook_secret', 'default_terminal_id', 'lock_terminal', 'show_logs' ), array_keys( $gateway->form_fields ) );
+		$this->assertSame( array( 'enabled', 'title', 'description', 'mode', 'access_token', 'webhook_secret', 'default_terminal_id', 'lock_terminal', 'show_logs', 'log_level' ), array_keys( $gateway->form_fields ) );
+		$this->assertSame( 'select', $gateway->form_fields['log_level']['type'] );
+		$this->assertSame( 'debug', $gateway->form_fields['log_level']['default'] );
+		$this->assertSame( array( 'off' => 'Off', 'errors' => 'Errors only', 'debug' => 'Debug (recommended while testing)' ), $gateway->form_fields['log_level']['options'] );
 		$this->assertSame( 'text', $gateway->form_fields['default_terminal_id']['type'] );
 		$this->assertSame( 'Mercado Pago Terminal', $gateway->form_fields['title']['default'] );
 		$this->assertSame( 'Pay in person on a Mercado Pago Point terminal.', $gateway->form_fields['description']['default'] );
@@ -154,6 +157,8 @@ class GatewayTest extends TestCase {
 		$this->assertSame( $gateway->form_fields['enabled_terminals']['options'], WP_Stub::$transients['mptfwc_terminal_choices_test'] );
 		$html = $this->render( $gateway, 'admin_options' );
 		$this->assertStringContainsString( 'Mercado Pago Terminal diagnostics', $html );
+		$this->assertStringContainsString( 'source=mercadopago-terminal', $html );
+		$this->assertStringContainsString( 'source: mercadopago-terminal)', $html );
 		$this->assertStringContainsString( 'MISSING — webhook signatures are not verified', $html );
 		$this->assertStringContainsString( 'data-nonce="nonce-mptfwc_admin_actions"', $html );
 		$this->assertStringContainsString( '<td>STANDALONE</td>', $html );

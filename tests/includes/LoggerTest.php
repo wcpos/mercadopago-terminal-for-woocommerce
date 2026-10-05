@@ -5,6 +5,8 @@ use WCPOS\WooCommercePOS\MercadoPagoTerminal\Logger;
 class LoggerTest extends TestCase {
 	protected function setUp(): void {
 		WP_Stub::reset();
+		Logger::reset_request();
+		Logger::configure( 'debug' );
 		Logger::$logger = null;
 		Logger::$log_level = null;
 	}
@@ -15,19 +17,22 @@ class LoggerTest extends TestCase {
 		$this->assertSame( 'TEST-***', Logger::redact( 'TEST-1234567890123456-100512-abcdefabcdefabcdef-123456789' ) );
 	}
 
-	public function test_redact_truncates_at_1000_characters(): void {
-		$this->assertSame( str_repeat( 'a', 1000 ), Logger::redact( str_repeat( 'a', 1000 ) ) );
-		$this->assertSame( str_repeat( 'a', 1000 ) . '…', Logger::redact( str_repeat( 'a', 1001 ) ) );
+	public function test_log_truncates_messages_at_1000_characters(): void {
+		foreach ( array( 1000, 1001 ) as $length ) {
+			Logger::log( str_repeat( 'a', $length ) );
+			$this->assertSame( '[' . Logger::request_id() . '] ' . str_repeat( 'a', 1000 ) . ( $length > 1000 ? '…' : '' ), end( WP_Stub::$logs )['message'] );
+		}
 	}
 
 	public function test_log_redacts_context_and_maps_success_to_info(): void {
 		Logger::log( 'Paid Bearer abc.def', array( 'access_token' => 'private', 'webhook_secret' => 'private', 'nested' => array( 'refreshToken' => 'private', 'note' => 'Bearer abc.def' ), 'terminal' => 'terminal-1' ), 'success' );
-		$this->assertCount( 1, WP_Stub::$logs );
-		$entry = WP_Stub::$logs[0];
+		$entries = array_values( array_filter( WP_Stub::$logs, function ( $entry ) { return false !== strpos( $entry['message'], 'Paid Bearer' ); } ) );
+		$this->assertCount( 1, $entries );
+		$entry = $entries[0];
 		$this->assertSame( 'info', $entry['level'] );
-		$this->assertSame( array( 'source' => 'mercadopago-terminal-for-woocommerce' ), $entry['context'] );
+		$this->assertSame( array( 'source' => 'mercadopago-terminal' ), $entry['context'] );
 		list( $message, $context ) = explode( ' {', $entry['message'], 2 );
-		$this->assertSame( 'Paid Bearer ***', $message );
+		$this->assertSame( '[' . Logger::request_id() . '] Paid Bearer ***', $message );
 		$this->assertSame( array( 'access_token' => '***', 'webhook_secret' => '***', 'nested' => array( 'refreshToken' => '***', 'note' => 'Bearer ***' ), 'terminal' => 'terminal-1' ), json_decode( '{' . $context, true ) );
 	}
 

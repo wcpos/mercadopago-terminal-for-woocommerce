@@ -4,6 +4,7 @@ class WP_Stub {
 	public static $actions = array();
 	public static $filters = array();
 	public static $logs = array();
+	public static $logger;
 	public static $boot_actions = array();
 	public static $http_requests = array();
 	public static $http_responses = array();
@@ -24,6 +25,7 @@ class WP_Stub {
 		self::$actions = array();
 		self::$filters = array();
 		self::$logs = array();
+		self::$logger = null;
 		self::$http_requests = array();
 		self::$http_responses = array();
 		self::$uuid_counter = 0;
@@ -158,11 +160,13 @@ if ( ! function_exists( 'wp_remote_request' ) ) {
 }
 if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) { function wp_remote_retrieve_response_code( $response ) { return $response['response']['code']; } }
 if ( ! function_exists( 'wp_remote_retrieve_body' ) ) { function wp_remote_retrieve_body( $response ) { return $response['body']; } }
+if ( ! function_exists( 'wp_remote_retrieve_headers' ) ) { function wp_remote_retrieve_headers( $response ) { return $response['headers'] ?? array(); } }
 if ( ! function_exists( 'load_plugin_textdomain' ) ) { function load_plugin_textdomain( $domain, $deprecated = false, $path = '' ) { return true; } }
 if ( ! function_exists( 'deactivate_plugins' ) ) { function deactivate_plugins( $plugins ) {} }
 if ( ! function_exists( 'wp_die' ) ) { function wp_die( $message ) { throw new RuntimeException( $message ); } }
 if ( ! function_exists( 'wc_get_logger' ) ) {
 	function wc_get_logger() {
+		if ( null !== WP_Stub::$logger ) { return WP_Stub::$logger; }
 		return new class {
 			public function log( $level, $message, $context ) {
 				WP_Stub::$logs[] = array( 'level' => $level, 'message' => $message, 'context' => $context );

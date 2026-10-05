@@ -60,7 +60,7 @@ class WebhookHandlerTest extends TestCase {
 		$this->assertSame( 1, $this->order->payment_complete_calls );
 		$this->assertSame( self::DATA_ID, $this->order->get_transaction_id() );
 		$this->assertStringContainsString( 'via webhook', implode( ' ', $this->order->notes ) );
-		$this->assertStringContainsString( '"status":"paid"', WP_Stub::$logs[0]['message'] );
+		$this->assertStringContainsString( '"status":"paid"', end( WP_Stub::$logs )['message'] );
 	}
 
 	public function test_invalid_signature_rejects_without_client_or_order_changes(): void {
@@ -69,17 +69,18 @@ class WebhookHandlerTest extends TestCase {
 		$this->assertSame( array(), $this->tokens );
 		$this->assertSame( array(), $this->client->calls );
 		$this->assertEquals( $before, $this->order );
-		$this->assertSame( 'warning', WP_Stub::$logs[0]['level'] );
-		$this->assertStringNotContainsString( self::SECRET, WP_Stub::$logs[0]['message'] );
-		$this->assertStringNotContainsString( 'ts=1,v1=invalid', WP_Stub::$logs[0]['message'] );
+		$this->assertSame( 'warning', end( WP_Stub::$logs )['level'] );
+		$this->assertStringNotContainsString( self::SECRET, end( WP_Stub::$logs )['message'] );
+		$this->assertStringNotContainsString( 'ts=1,v1=invalid', end( WP_Stub::$logs )['message'] );
 	}
 
 	public function test_no_secret_processes_and_logs_warning(): void {
 		WP_Stub::$options['woocommerce_' . Settings::GATEWAY_ID . '_settings']['webhook_secret'] = '';
 		$this->assertSame( array( 'code' => 200, 'body' => 'OK' ), $this->handler->process( $this->body, '', self::REQUEST_ID, array() ) );
 		$this->assertTrue( $this->order->is_paid() );
-		$this->assertSame( 'warning', WP_Stub::$logs[0]['level'] );
-		$this->assertStringContainsString( 'signature was not verified', WP_Stub::$logs[0]['message'] );
+		$warnings = array_values( array_filter( WP_Stub::$logs, function ( $entry ) { return 'warning' === $entry['level']; } ) );
+		$this->assertCount( 1, $warnings );
+		$this->assertStringContainsString( 'signature not verified', $warnings[0]['message'] );
 	}
 
 	public function test_payment_type_is_ignored_without_client_call(): void {
@@ -109,8 +110,8 @@ class WebhookHandlerTest extends TestCase {
 		$this->client->returns['get_order'] = array( new MercadoPagoApiException( 'API unavailable', 503 ) );
 		$this->assertSame( array( 'code' => 500, 'body' => 'Error' ), $this->handler->process( $this->body, $this->signature, self::REQUEST_ID, array() ) );
 		$this->assertFalse( $this->order->is_paid() );
-		$this->assertSame( 'error', WP_Stub::$logs[0]['level'] );
-		$this->assertSame( 'API unavailable', WP_Stub::$logs[0]['message'] );
+		$this->assertSame( 'error', end( WP_Stub::$logs )['level'] );
+		$this->assertStringContainsString( 'API unavailable', end( WP_Stub::$logs )['message'] );
 	}
 
 	public function test_body_status_cannot_complete_unpaid_fetched_order(): void {
@@ -125,7 +126,7 @@ class WebhookHandlerTest extends TestCase {
 	public function test_missing_id_is_acknowledged_without_client_call(): void {
 		$this->assertSame( array( 'code' => 200, 'body' => 'OK' ), $this->handler->process( '{}', $this->signature( '' ), self::REQUEST_ID, array() ) );
 		$this->assertSame( array(), $this->client->calls );
-		$this->assertSame( 'warning', WP_Stub::$logs[0]['level'] );
+		$this->assertSame( 'warning', end( WP_Stub::$logs )['level'] );
 	}
 
 	public function test_invalid_json_uses_query_id(): void {

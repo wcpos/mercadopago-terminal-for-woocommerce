@@ -100,8 +100,8 @@ class RefundHandlerTest extends TestCase {
 		$this->assertSame( '', $this->refund->get_meta( RefundHandler::META_MP_REFUND_ID ) );
 		$this->assertSame( 0, $this->refund->save_calls );
 		$this->assertSame( array(), $this->order->notes );
-		$this->assertCount( 1, WP_Stub::$logs );
-		$this->assertSame( 'error', WP_Stub::$logs[0]['level'] );
+		$this->assertCount( 1, array_filter( WP_Stub::$logs, function ( $entry ) { return 'error' === $entry['level']; } ) );
+		$this->assertSame( 'error', end( WP_Stub::$logs )['level'] );
 	}
 
 	/** @dataProvider unavailable_transaction_provider */
@@ -185,6 +185,6 @@ class RefundHandlerTest extends TestCase {
 		$this->assertSame( 'mptfwc_refund_failed', $result->get_error_code() );
 		$this->assertSame( 'Unexpected failure', $result->get_error_message() );
 		$this->assertSame( '', $this->refund->get_meta( RefundHandler::META_MP_REFUND_ID ) );
-		$this->assertCount( 1, WP_Stub::$logs );
+		$this->assertCount( 1, array_filter( WP_Stub::$logs, function ( $entry ) { return 'error' === $entry['level']; } ) );
 	}
 }

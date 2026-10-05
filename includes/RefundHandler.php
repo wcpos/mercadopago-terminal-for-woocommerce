@@ -53,10 +53,11 @@ class RefundHandler {
 				if ( ! $payment_id ) { return new \WP_Error( 'mptfwc_refund_unavailable', __( 'This order has no Mercado Pago payment id, so a partial refund cannot be sent. Refund the full amount, or refund on the Point terminal.', 'mercadopago-terminal-for-woocommerce' ) ); }
 				$payload = array( 'amount' => Money::to_amount( $amount ), 'transaction_id' => $payment_id );
 			}
+			Logger::log( 'Mercado Pago refund requested', array( 'order_id' => $order->get_id(), 'mp_order_id' => $mp_order_id, 'refund_id' => $refund->get_id(), 'amount' => Money::to_amount( $amount ), 'full' => null === $payload, 'idempotency_key' => 'refund-' . $refund->get_id() ), 'info' );
 			try {
 				$response = $this->client->refund_order( $mp_order_id, 'refund-' . $refund->get_id(), $payload );
 			} catch ( MercadoPagoApiException $e ) {
-				Logger::log( 'Mercado Pago refund failed: ' . $e->getMessage(), array(), 'error' );
+				Logger::log( 'Mercado Pago refund failed: ' . $e->getMessage(), array( 'http_status' => $e->http_status(), 'error_code' => $e->error_code() ), 'error' );
 				return new \WP_Error( 'mptfwc_refund_failed', sprintf( __( 'Mercado Pago refused the refund: %s. Some card acquirers only allow refunds on the terminal; if so, refund it on the Point terminal and record the refund in WooCommerce without "Refund via Mercado Pago Terminal".', 'mercadopago-terminal-for-woocommerce' ), $e->getMessage() ) );
 			}
 			$refunds = $response['transactions']['refunds'] ?? array();
@@ -66,7 +67,8 @@ class RefundHandler {
 			$note = sprintf( 'Mercado Pago Point refund of %s processed (refund %s, order status %s).', Money::to_amount( $amount ), $refund_id, $response['status'] ?? '' );
 			if ( '' !== $reason ) { $note .= ' ' . $reason; }
 			$order->add_order_note( $note );
+			Logger::log( 'Mercado Pago refund succeeded', array( 'mp_refund_id' => $refund_id, 'status' => $response['status'] ?? '' ), 'success' );
 			return true;
-		} catch ( \Exception $e ) { Logger::log( 'Mercado Pago refund failed: ' . $e->getMessage(), array(), 'error' ); return new \WP_Error( 'mptfwc_refund_failed', $e->getMessage() ); }
+		} catch ( \Exception $e ) { Logger::log( 'Mercado Pago refund failed: ' . $e->getMessage(), array( 'http_status' => 0, 'error_code' => '' ), 'error' ); return new \WP_Error( 'mptfwc_refund_failed', $e->getMessage() ); }
 	}
 }

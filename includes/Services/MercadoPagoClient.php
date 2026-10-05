@@ -64,25 +64,31 @@ class MercadoPagoClient {
 		);
 		if ( '' !== $idempotency_key ) { $args['headers']['X-Idempotency-Key'] = $idempotency_key; }
 		if ( null !== $body ) { $args['body'] = wp_json_encode( $body ); }
+		Logger::log( 'Mercado Pago API request: ' . $method . ' ' . $path, array( 'method' => $method, 'url' => self::BASE_URL . $path, 'headers' => $args['headers'], 'body' => $body, 'timeout' => $args['timeout'] ), 'debug' );
+		$start = Logger::timer();
 		$response = wp_remote_request( self::BASE_URL . $path, $args );
+		$duration = Logger::elapsed_ms( $start );
 		if ( is_wp_error( $response ) ) {
-			Logger::log_api_error( 'Mercado Pago API transport error: ' . $response->get_error_message(), array( 'method' => $method, 'path' => $path ) );
+			Logger::log_api_error( 'Mercado Pago API transport error: ' . $response->get_error_message(), array( 'method' => $method, 'path' => $path, 'duration_ms' => $duration, 'error_code' => $response->get_error_code() ) );
 			throw new MercadoPagoApiException( 'Mercado Pago API request failed.', 0 );
 		}
 		$status = (int) wp_remote_retrieve_response_code( $response );
 		$raw    = (string) wp_remote_retrieve_body( $response );
 		$data   = '' === $raw ? array() : json_decode( $raw, true );
+		$headers = function_exists( 'wp_remote_retrieve_headers' ) ? wp_remote_retrieve_headers( $response ) : array();
+		$context = array( 'method' => $method, 'path' => $path, 'status' => $status, 'duration_ms' => $duration, 'response_headers' => $headers instanceof \Traversable ? iterator_to_array( $headers ) : (array) $headers, 'body' => '' !== $raw && is_array( $data ) ? $data : $raw );
+		Logger::log( sprintf( 'Mercado Pago API response: %s %s HTTP %d in %d ms', $method, $path, $status, $duration ), $context, 'debug' );
 		if ( $status < 200 || $status >= 300 ) {
 			$data = is_array( $data ) ? $data : array();
 			$message = $data['errors'][0]['message'] ?? $data['message'] ?? $data['error'] ?? 'Mercado Pago API error.';
 			$code    = $data['errors'][0]['code'] ?? $data['error'] ?? '';
-			Logger::log_api_error( sprintf( 'Mercado Pago API error (%s %s, HTTP %d): %s', $method, $path, $status, $message ), array( 'method' => $method, 'path' => $path, 'status' => $status, 'body' => $data ) );
+			Logger::log_api_error( sprintf( 'Mercado Pago API error (%s %s, HTTP %d): %s', $method, $path, $status, $message ), $context + array( 'error_code' => $code ) );
 			throw new MercadoPagoApiException( $message, $status, $code, $data );
 		}
 		if ( ! is_array( $data ) ) {
+			Logger::log_api_error( 'Mercado Pago API returned an invalid response.', $context + array( 'error_code' => '' ) );
 			throw new MercadoPagoApiException( 'Mercado Pago API returned an invalid response.', $status );
 		}
-		Logger::log( sprintf( 'Mercado Pago API request succeeded (%s %s).', $method, $path ), array( 'method' => $method, 'path' => $path, 'status' => $status ), 'debug' );
 		return $data;
 	}
 }

@@ -22,7 +22,8 @@ class PointPaymentService {
 	}
 
 	public function start_payment_for_order( $order, string $terminal_id = '' ): array {
-		return PaymentLock::with_lock( (int) $order->get_id(), 'create_payment', function () use ( $order, $terminal_id ) {
+		$start = Logger::timer();
+		$result = PaymentLock::with_lock( (int) $order->get_id(), 'create_payment', function () use ( $order, $terminal_id ) {
 			if ( $order->is_paid() ) { return array( 'status' => 'already_paid' ); }
 			$current = PaymentAttempt::current( $order );
 			if ( $current && $current['mp_order_id'] ) {
@@ -49,14 +50,19 @@ class PointPaymentService {
 				throw $e;
 			}
 			PaymentAttempt::record_created( $order, $pending, $mp_order );
-			Logger::log( 'Mercado Pago Point order created.', array( 'order_id' => (int) $order->get_id(), 'mp_order_id' => $mp_order['id'], 'terminal_id' => $terminal_id ), 'success' );
 			return array( 'status' => 'created', 'mp_order_id' => $mp_order['id'], 'terminal_id' => $terminal_id );
 		} );
+		Logger::log( 'Mercado Pago payment start result', array( 'order_id' => $order->get_id(), 'mp_order_id' => $result['mp_order_id'] ?? (string) $order->get_meta( PaymentAttempt::META_CURRENT_MP_ORDER_ID ), 'status' => $result['status'], 'duration_ms' => Logger::elapsed_ms( $start ) ), 'info' );
+		return $result;
 	}
 
 	public function poll_order( $order ): array {
+		$start = Logger::timer();
 		$current = PaymentAttempt::current( $order );
-		if ( ! $current ) { return array( 'status' => 'idle' ); }
+		if ( ! $current ) {
+			Logger::log( 'Mercado Pago payment poll result', array( 'order_id' => $order->get_id(), 'mp_order_id' => '', 'status' => 'idle', 'duration_ms' => Logger::elapsed_ms( $start ) ), 'debug' );
+			return array( 'status' => 'idle' );
+		}
 		if ( PaymentAttempt::is_non_final( $current['status'] ) ) {
 			$remote = $this->client->get_order( $current['mp_order_id'] );
 			$result = $this->reconciler->reconcile( $order, $remote, 'poll' );
@@ -69,11 +75,13 @@ class PointPaymentService {
 		} elseif ( $created && time() - $created > 60 && in_array( $result['status'], array( 'created', 'at_terminal' ), true ) ) {
 			$result['message'] = __( 'Still waiting for the terminal. Check the terminal, or cancel and retry.', 'mercadopago-terminal-for-woocommerce' );
 		}
+		Logger::log( 'Mercado Pago payment poll result', array( 'order_id' => $order->get_id(), 'mp_order_id' => $current['mp_order_id'], 'status' => $result['status'], 'duration_ms' => Logger::elapsed_ms( $start ) ), 'debug' );
 		return $result;
 	}
 
 	public function cancel_order_payment( $order ): array {
-		return PaymentLock::with_lock( (int) $order->get_id(), 'cancel_payment', function () use ( $order ) {
+		$start = Logger::timer();
+		$result = PaymentLock::with_lock( (int) $order->get_id(), 'cancel_payment', function () use ( $order ) {
 			$current = PaymentAttempt::current( $order );
 			if ( ! $current ) { return array( 'status' => 'idle' ); }
 			$remote = $this->client->get_order( $current['mp_order_id'] );
@@ -98,6 +106,8 @@ class PointPaymentService {
 				'message' => __( 'The payment is already on the terminal. Cancel it on the terminal, or wait for it to expire.', 'mercadopago-terminal-for-woocommerce' ),
 			);
 		} );
+		Logger::log( 'Mercado Pago payment cancel result', array( 'order_id' => $order->get_id(), 'mp_order_id' => (string) $order->get_meta( PaymentAttempt::META_CURRENT_MP_ORDER_ID ), 'status' => $result['status'], 'duration_ms' => Logger::elapsed_ms( $start ) ), 'info' );
+		return $result;
 	}
 
 	public static function build_payload( $order, array $pending ): array {

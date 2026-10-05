@@ -19,9 +19,11 @@ class PaymentReconciler {
 		if ( ! PaymentLock::acquire( $order_id, 'complete_payment', self::COMPLETE_LOCK_TTL ) ) {
 			Logger::log( 'Mercado Pago Terminal payment completion already in progress for this order.', array( 'order_id' => $order_id, 'mp_order_id' => $mp_order['id'], 'source' => $source ), 'info' );
 			// Another request is completing the order; report paid only if verified.
-			if ( $this->verify( $order, $mp_order )['valid'] ) {
+			$verification = $this->verify( $order, $mp_order );
+			if ( $verification['valid'] ) {
 				return array( 'status' => 'paid', 'completing' => true );
 			}
+			Logger::log( 'Mercado Pago payment verification failed', array( 'order_id' => $order_id, 'mp_order_id' => $mp_order['id'], 'source' => $source, 'errors' => $verification['errors'] ), 'warning' );
 			return array( 'status' => 'pending', 'retry_allowed' => false );
 		}
 		try {
@@ -83,6 +85,7 @@ class PaymentReconciler {
 		$status = PaymentAttempt::status( $mp_order );
 		$verification = $this->verify( $order, $mp_order );
 		if ( ! $verification['valid'] ) {
+			Logger::log( 'Mercado Pago payment verification failed', array( 'order_id' => $order->get_id(), 'mp_order_id' => $mp_order['id'], 'source' => $source, 'errors' => $verification['errors'] ), 'warning' );
 			$order->add_order_note( sprintf( 'Mercado Pago Point verification failed via %s: %s', $source, implode( '; ', $verification['errors'] ) ) );
 			$order->save();
 			return array( 'status' => 'verification_failed', 'payment_status' => $status, 'errors' => $verification['errors'] );
@@ -107,7 +110,11 @@ class PaymentReconciler {
 	private function complete_paid_order( $order, array $mp_order, string $source ): array {
 		$mp_order_id = $mp_order['id'];
 		if ( $order->is_paid() ) {
-			if ( $order->get_transaction_id() === $mp_order_id ) { return array( 'status' => 'paid', 'idempotent' => true ); }
+			if ( $order->get_transaction_id() === $mp_order_id ) {
+				Logger::log( 'Mercado Pago payment already completed', array( 'order_id' => $order->get_id(), 'mp_order_id' => $mp_order_id, 'source' => $source ), 'debug' );
+				return array( 'status' => 'paid', 'idempotent' => true );
+			}
+			Logger::log( 'Mercado Pago payment conflict: order already paid by another transaction', array( 'order_id' => $order->get_id(), 'mp_order_id' => $mp_order_id, 'source' => $source ), 'warning' );
 			$order->add_order_note( 'Mercado Pago Point order processed but the WooCommerce order was already paid by another transaction.' );
 			$order->save();
 			return array( 'status' => 'conflict' );
@@ -119,6 +126,7 @@ class PaymentReconciler {
 		$order->payment_complete( $mp_order_id );
 		$order->add_order_note( sprintf( 'Mercado Pago Point payment completed via %s (order %s, payment %s).', $source, $mp_order_id, $payment_id ) );
 		$order->save();
+		Logger::log( 'Mercado Pago payment completed', array( 'order_id' => $order->get_id(), 'mp_order_id' => $mp_order_id, 'payment_id' => $payment_id, 'source' => $source ), 'success' );
 		return array( 'status' => 'paid' );
 	}
 }
