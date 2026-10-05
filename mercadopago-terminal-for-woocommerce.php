@@ -60,6 +60,7 @@ add_action( 'init', __NAMESPACE__ . '\\load_textdomain' );
 
 function init(): void {
 	// Later changes register the gateway, AJAX and webhook handlers here.
+	new WebhookHandler();
 	do_action( 'mptfwc_init' );
 }
 add_action( 'plugins_loaded', __NAMESPACE__ . '\\init', 11 );
