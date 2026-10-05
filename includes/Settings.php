@@ -53,6 +53,12 @@ class Settings {
 	/** Whether the checkout log tools (Show logs / Copy / Clear) are shown. */
 	public function show_logs(): bool { return 'yes' === $this->get( 'show_logs', 'no' ); }
 
+	public function log_level(): string {
+		// During beta, every tester should produce full logs by default.
+		$level = $this->get( 'log_level', 'debug' );
+		return in_array( $level, array( 'off', 'errors', 'debug' ), true ) ? $level : 'debug';
+	}
+
 	/**
 	 * Terminals the merchant allows at checkout. Empty means all active
 	 * terminals are allowed (no restriction configured). When a restriction is

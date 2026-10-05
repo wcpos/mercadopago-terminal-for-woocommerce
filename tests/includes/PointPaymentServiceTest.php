@@ -75,7 +75,7 @@ class PointPaymentServiceTest extends TestCase {
 		$this->assertIsArray( $pending );
 		$this->assertSame( 1, $this->order->save_calls );
 		$this->assertNull( PaymentAttempt::current( $this->order ) );
-		$this->assertSame( 'error', WP_Stub::$logs[0]['level'] );
+		$this->assertSame( 'error', end( WP_Stub::$logs )['level'] );
 		$this->client->returns['create_order'] = array( $this->fixture( 'order-created', $pending ) );
 		$this->assertSame( 'created', $this->service->start_payment_for_order( $this->order )['status'] );
 		$this->assertSame( array( 'list_terminals', 'create_order', 'list_terminals', 'create_order' ), array_column( $this->client->calls, 'method' ) );

@@ -79,15 +79,15 @@ class TerminalServiceTest extends TestCase {
 	public function test_unlisted_terminal_passes_with_warning(): void {
 		$this->client->returns['list_terminals'] = array( $this->fixture );
 		$this->service->assert_can_receive_orders( 'UNLISTED' );
-		$this->assertSame( 'warning', WP_Stub::$logs[0]['level'] );
-		$this->assertStringContainsString( 'UNLISTED', WP_Stub::$logs[0]['message'] );
+		$this->assertSame( 'warning', end( WP_Stub::$logs )['level'] );
+		$this->assertStringContainsString( 'UNLISTED', end( WP_Stub::$logs )['message'] );
 	}
 
 	public function test_list_failure_passes_with_warning(): void {
 		$this->client->returns['list_terminals'] = array( new MercadoPagoApiException( 'List failed.', 500 ) );
 		$this->service->assert_can_receive_orders( self::TERMINAL_ID );
-		$this->assertSame( 'warning', WP_Stub::$logs[0]['level'] );
-		$this->assertStringContainsString( 'List failed.', WP_Stub::$logs[0]['message'] );
+		$this->assertSame( 'warning', end( WP_Stub::$logs )['level'] );
+		$this->assertStringContainsString( 'List failed.', end( WP_Stub::$logs )['message'] );
 		$this->assertCount( 1, $this->client->calls );
 	}
 
@@ -106,8 +106,8 @@ class TerminalServiceTest extends TestCase {
 		$this->client->returns['set_operating_mode'] = array( $response );
 		$this->assertSame( $response, $this->service->set_pdv_mode( self::TERMINAL_ID ) );
 		$this->assertSame( array( array( 'method' => 'set_operating_mode', 'args' => array( self::TERMINAL_ID, 'PDV' ) ) ), $this->client->calls );
-		$this->assertCount( 1, WP_Stub::$logs );
-		$this->assertStringContainsString( self::TERMINAL_ID, WP_Stub::$logs[0]['message'] );
+		$this->assertCount( 1, array_filter( WP_Stub::$logs, function ( $entry ) { return false !== strpos( $entry['message'], self::TERMINAL_ID ); } ) );
+		$this->assertStringContainsString( self::TERMINAL_ID, end( WP_Stub::$logs )['message'] );
 	}
 
 	public function test_fake_client_rejects_unexpected_calls(): void {

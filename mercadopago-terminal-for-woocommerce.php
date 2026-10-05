@@ -59,6 +59,7 @@ function load_textdomain(): void {
 add_action( 'init', __NAMESPACE__ . '\\load_textdomain' );
 
 function init(): void {
+	Logger::configure( ( new Settings() )->log_level() );
 	add_filter( 'woocommerce_payment_gateways', array( Gateway::class, 'register_gateway' ) );
 	add_action( 'woocommerce_create_refund', array( RefundHandler::class, 'remember_refund' ), 10, 2 );
 	new AjaxHandler();

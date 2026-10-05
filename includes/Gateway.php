@@ -73,6 +73,13 @@ class Gateway extends WC_Payment_Gateway {
 			'desc_tip'    => true,
 			'default'     => 'no',
 		);
+		$this->form_fields['log_level'] = array(
+			'title'       => __( 'Log level', 'mercadopago-terminal-for-woocommerce' ),
+			'type'        => 'select',
+			'options'     => array( 'off' => __( 'Off', 'mercadopago-terminal-for-woocommerce' ), 'errors' => __( 'Errors only', 'mercadopago-terminal-for-woocommerce' ), 'debug' => __( 'Debug (recommended while testing)', 'mercadopago-terminal-for-woocommerce' ) ),
+			'default'     => 'debug',
+			'description' => __( 'Written to WooCommerce → Status → Logs (source: mercadopago-terminal). Debug records every Mercado Pago request and response with secrets removed.', 'mercadopago-terminal-for-woocommerce' ),
+		);
 	}
 
 	/**
@@ -171,8 +178,8 @@ class Gateway extends WC_Payment_Gateway {
 		echo '<tr><th>' . esc_html__( 'Payment logs', 'mercadopago-terminal-for-woocommerce' ) . '</th><td>';
 		printf(
 			/* translators: %s: link to the WooCommerce status logs screen. */
-			esc_html__( 'Recorded in %s (source: mercadopago-terminal-for-woocommerce).', 'mercadopago-terminal-for-woocommerce' ),
-			'<a href="' . esc_url( admin_url( 'admin.php?page=wc-status&tab=logs' ) ) . '">' . esc_html__( 'WooCommerce → Status → Logs', 'mercadopago-terminal-for-woocommerce' ) . '</a>'
+			esc_html__( 'Recorded in %s (source: mercadopago-terminal).', 'mercadopago-terminal-for-woocommerce' ),
+			'<a href="' . esc_url( admin_url( 'admin.php?page=wc-status&tab=logs&source=mercadopago-terminal' ) ) . '">' . esc_html__( 'WooCommerce → Status → Logs', 'mercadopago-terminal-for-woocommerce' ) . '</a>'
 		);
 		echo '</td></tr>';
 		echo '</tbody></table>';
