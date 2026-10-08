@@ -160,7 +160,7 @@ class Test_Provider_Adapter extends \WP_UnitTestCase {
 	}
 	public static function refund_amounts(): array {
 		return array(
-			array( 'processed', '24.0', 'succeeded' ), array( 'processed', '5.00', 'pending' ),
+			array( 'processed', '24.0', 'succeeded' ), array( 'processed', '5.00', 'pending' ), array( 'processed', '', 'pending' ),
 			array( 'processing', '24.00', 'pending' ), array( 'processing', '5.00', 'pending' ),
 			array( 'pending', '24.00', 'pending' ), array( 'pending', '5.00', 'pending' ),
 		);

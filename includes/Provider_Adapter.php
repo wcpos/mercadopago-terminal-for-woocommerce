@@ -138,7 +138,9 @@ class Provider_Adapter extends Abstract_Provider_Adapter {
 		if ( is_wp_error( $result ) ) { return $result; }
 		$refunds = $result['transactions']['refunds'] ?? array();
 		$refund = end( $refunds );
-		if ( 'processed' === ( $refund['status'] ?? '' ) && ! Money::equals( $refund['amount'] ?? '0', $amount ) ) {
+		// A processed refund whose amount is missing, non-numeric or different is pending + logged:
+		// Mercado Pago moved money, and Money::equals() must never throw after that.
+		if ( 'processed' === ( $refund['status'] ?? '' ) && ( ! is_numeric( $refund['amount'] ?? null ) || ! Money::equals( (string) $refund['amount'], $amount ) ) ) {
 			wc_get_logger()->error( sprintf( 'Mercado Pago refund amount mismatch: requested %s, refunded %s.', $amount, $refund['amount'] ?? 'missing' ), array( 'source' => 'mercadopago-terminal' ) );
 			// Mercado Pago moved money: keep the refund recorded as pending until someone reconciles it
 			// in the portal; `failed` would delete the WooCommerce refund and invite a second refund.
