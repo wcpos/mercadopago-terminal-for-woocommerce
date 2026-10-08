@@ -20,12 +20,15 @@ class Provider_Adapter extends Abstract_Provider_Adapter {
 			return ( new MercadoPagoClient( ( new Settings() )->access_token() ) )->$method( ...$args );
 		} catch ( \Throwable $e ) {
 			$status = $e instanceof MercadoPagoApiException ? $e->http_status() : 0;
-			$code = 'mercadopago_' . ( $e instanceof MercadoPagoApiException && $e->error_code() ? $e->error_code() : $status );
+			$error_code = $e instanceof MercadoPagoApiException ? $e->error_code() : '';
+			$code = 'mercadopago_' . ( $error_code ?: $status );
 			$message = Redactor::message( $e->getMessage() );
-			if ( $status < 400 || $status >= 500 || in_array( $status, array( 409, 429 ), true ) ) {
-				return $this->indeterminate( $code, $message );
+			// Per the reference, only an idempotency-key conflict leaves a 409 ambiguous.
+			$data = array( 'status' => 502, 'http_status' => $status, 'error_code' => $error_code );
+			if ( $status < 400 || $status >= 500 || 429 === $status || ( 409 === $status && 'idempotency_key_already_used' === $error_code ) ) {
+				$data['indeterminate'] = true;
 			}
-			return new \WP_Error( $code, $message, array( 'status' => 502, 'http_status' => $status ) );
+			return new \WP_Error( $code, $message, $data );
 		}
 	}
 
@@ -40,13 +43,19 @@ class Provider_Adapter extends Abstract_Provider_Adapter {
 	public function create_reader_action( array $row, string $reader_id ) {
 		$order = wc_get_order( $row['order_id'] );
 		$duration = (string) apply_filters( 'mptfwc_order_expiration_time', 'PT5M', $order );
+		// Per the reference, external_reference permits letters, digits, hyphen and underscore, not colon.
 		$result = $this->call( 'create_order', array( array(
-			'type' => 'point', 'external_reference' => 'wcpos:' . $row['id'],
+			'type' => 'point', 'external_reference' => 'wcpos_' . $row['id'],
 			'expiration_time' => $duration, 'description' => 'Order #' . $order->get_order_number(),
 			'transactions' => array( 'payments' => array( array( 'amount' => $row['amount'] ) ) ),
 			'config' => array( 'point' => array( 'terminal_id' => $reader_id, 'print_on_terminal' => 'no_ticket' ) ),
 		), $row['id'] ) );
-		if ( is_wp_error( $result ) ) { return $result; }
+		if ( is_wp_error( $result ) ) {
+			if ( 409 === ( $result->get_error_data()['http_status'] ?? 0 ) && 'already_queued_order_for_terminal' === ( $result->get_error_data()['error_code'] ?? '' ) ) {
+				return new \WP_Error( 'mercadopago_terminal_busy', __( 'The terminal is still busy with an earlier order. Finish or cancel it on the terminal, then try again.', 'mercadopago-terminal-for-woocommerce' ), array( 'status' => 409 ) );
+			}
+			return $result;
+		}
 		if ( empty( $result['id'] ) ) { return $this->indeterminate( 'mercadopago_response', 'Mercado Pago returned no order id.' ); }
 		$expires = null;
 		try {
@@ -62,10 +71,10 @@ class Provider_Adapter extends Abstract_Provider_Adapter {
 			// Read the durable row, including after a PHP restart; never restart grace on a poll.
 			foreach ( wc_get_orders( array( 'type' => 'shop_order', 'limit' => 5, 'meta_key' => Ledger::META_KEY, 'meta_value' => $ref, 'meta_compare' => 'LIKE' ) ) as $order ) { // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- One action id lives on one order; the bound is a guard.
 				foreach ( Ledger::instance()->read( $order ) as $row ) {
-					if ( ( $row['provider_refs']['action'] ?? '' ) === $ref && time() - strtotime( $row['created_at_gmt'] ) < 60 ) { return array( 'status' => 'pending' ); }
+					if ( ( $row['provider_refs']['action'] ?? '' ) === $ref && strtotime( $row['expires_at'] ?? '' ) > time() ) { return array( 'status' => 'pending' ); }
 				}
 			}
-			return array( 'status' => 'failed', 'failure_reason' => 'provider_error' );
+			return array( 'status' => 'failed', 'failure_reason' => 'expired' );
 		}
 		return $this->observation( $result );
 	}
@@ -77,9 +86,10 @@ class Provider_Adapter extends Abstract_Provider_Adapter {
 		if ( 'failed' === $status ) { $result['failure_reason'] = $order['status_detail'] ?? 'provider_error'; }
 		if ( 'completed' === $status ) {
 			$payment = $order['transactions']['payments'][0] ?? array();
-			$result['amount'] = $payment['paid_amount'] ?? $payment['amount'] ?? null;
-			// Orders API carries no currency: Point charges in the account's local currency.
-			$result['currency'] = get_woocommerce_currency();
+			// Per the reference, amount is the order charge; paid_amount can include installment financing.
+			$result['amount'] = $payment['amount'] ?? null;
+			// Per the reference, orders can carry currency; preserve the store fallback when absent.
+			$result['currency'] = $order['currency'] ?? get_woocommerce_currency();
 			$result['provider_refs'] = array( 'transaction_id' => $order['id'], 'payment_id' => $payment['id'] ?? null );
 			if ( isset( $payment['payment_method'] ) ) {
 				$result['receipt'] = array( 'card_brand' => $payment['payment_method']['id'] ?? null, 'card_type' => $payment['payment_method']['type'] ?? null );
@@ -90,10 +100,8 @@ class Provider_Adapter extends Abstract_Provider_Adapter {
 
 	public function cancel( string $ref ) {
 		$result = $this->call( 'cancel_order', array( $ref, 'cancel-' . $ref ) );
-		// Mercado Pago only cancels an order while it is `created`; once the terminal has it, the
-		// API refuses with a 4xx. The exact error code is unverified against a live account, so
-		// any determinate refusal that is not an auth or not-found problem means "already on the
-		// terminal": Pro shows the cancel-on-terminal copy and waits for the provider's expiry.
+		// Per the reference, cannot_cancel_order means cancel on the terminal; already canceled is accepted.
+		if ( is_wp_error( $result ) && 409 === ( $result->get_error_data()['http_status'] ?? 0 ) && 'order_already_canceled' === ( $result->get_error_data()['error_code'] ?? '' ) ) { return 'requested'; }
 		$http_status = is_wp_error( $result ) ? (int) ( $result->get_error_data()['http_status'] ?? 0 ) : 0;
 		if ( is_wp_error( $result ) && empty( $result->get_error_data()['indeterminate'] ) && $http_status >= 400 && $http_status < 500 && ! in_array( $http_status, array( 401, 403, 404 ), true ) ) {
 			return new \WP_Error( 'wcpos_capture_mode_unsupported', __( 'The payment is already on the terminal. Cancel it on the terminal, or wait for it to expire.', 'mercadopago-terminal-for-woocommerce' ), array( 'status' => 501 ) );
@@ -118,21 +126,27 @@ class Provider_Adapter extends Abstract_Provider_Adapter {
 		if ( is_wp_error( $result ) ) { return $result; }
 		$refunds = $result['transactions']['refunds'] ?? array();
 		$refund = end( $refunds );
-		return array( 'status' => array( 'processed' => 'succeeded', 'pending' => 'pending', 'in_process' => 'pending' )[ $refund['status'] ?? '' ] ?? 'failed', 'provider_ref' => $refund['id'] ?? null );
+		// Per the reference, a new refund is processing. Unknown accepted states must stay pending:
+		// marking them failed deletes the Woo refund allocation and risks refunding the money twice.
+		return array( 'status' => array( 'processed' => 'succeeded', 'processing' => 'pending', 'pending' => 'pending', 'in_process' => 'pending', 'failed' => 'failed', 'rejected' => 'failed', 'cancelled' => 'failed', 'canceled' => 'failed' )[ $refund['status'] ?? '' ] ?? 'pending', 'provider_ref' => $refund['id'] ?? null );
 	}
 
 	public function verify_webhook( \WP_REST_Request $request ) {
 		$body = $request->get_json_params();
-		$ref = (string) ( $body['data']['id'] ?? '' );
+		$query = $request->get_query_params();
+		// Per the reference, SDK signatures can identify the order through the query string.
+		$ref = (string) ( $body['data']['id'] ?? $query['data.id'] ?? $query['data_id'] ?? $query['id'] ?? '' );
 		$request_id = (string) $request->get_header( 'x-request-id' );
 		if ( ! WebhookSignature::verify( (string) $request->get_header( 'x-signature' ), $request_id, $ref, ( new Settings() )->webhook_secret() ) ) {
 			return new \WP_Error( 'mercadopago_signature', 'Invalid webhook signature.', array( 'status' => 401 ) );
 		}
+		$type = $body['type'] ?? $body['topic'] ?? $query['type'] ?? $query['topic'] ?? 'order';
+		if ( 'order' !== $type ) { return new \WP_Error( 'mercadopago_ignored', 'Not a WCPOS payment.', array( 'status' => 200 ) ); }
 		$order = $this->call( 'get_order', array( $ref ) );
 		if ( is_wp_error( $order ) ) { return $order; }
 		$reference = $order['external_reference'] ?? '';
-		$id = 0 === strpos( $reference, 'wcpos:' ) && wp_is_uuid( substr( $reference, 6 ) ) ? substr( $reference, 6 ) : wcpos_pro_payment_id_for_action( 'mercadopago', $ref );
-		if ( ! $id ) { return new \WP_Error( 'mercadopago_payment_missing', 'No payment for order.', array( 'status' => 404 ) ); }
+		$id = 0 === strpos( $reference, 'wcpos_' ) && wp_is_uuid( substr( $reference, 6 ) ) ? substr( $reference, 6 ) : wcpos_pro_payment_id_for_action( 'mercadopago', $ref );
+		if ( ! $id ) { return new \WP_Error( 'mercadopago_ignored', 'Not a WCPOS payment.', array( 'status' => 200 ) ); }
 		$patch = $this->observation( $order );
 		$patch['status'] = array( 'completed' => ! empty( $patch['authorized'] ) ? 'authorized' : 'captured', 'failed' => 'failed', 'expired' => 'failed', 'cancelled' => 'voided', 'pending' => 'pending', 'in_progress' => 'pending' )[ $patch['status'] ];
 		unset( $patch['failure_reason'] );

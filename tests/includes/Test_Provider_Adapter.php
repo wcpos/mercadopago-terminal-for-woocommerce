@@ -26,7 +26,7 @@ class Test_Provider_Adapter extends \WP_UnitTestCase {
 		$call = $this->transport->raw_calls[0]['args'];
 		$payload = json_decode( $call['body'], true );
 		$this->assertSame( $row['id'], $call['headers']['X-Idempotency-Key'] );
-		$this->assertSame( 'wcpos:' . $row['id'], $payload['external_reference'] );
+		$this->assertSame( 'wcpos_' . $row['id'], $payload['external_reference'] );
 		$this->assertSame( '24.00', $payload['transactions']['payments'][0]['amount'] );
 		$this->assertSame( 'Order #' . $order->get_order_number(), $payload['description'] );
 		$this->assertSame( array( 'terminal_id' => 'reader-1', 'print_on_terminal' => 'no_ticket' ), $payload['config']['point'] );
@@ -48,11 +48,11 @@ class Test_Provider_Adapter extends \WP_UnitTestCase {
 		if ( 'failed' === $expected ) { $this->assertSame( $remote['status_detail'], $result['failure_reason'] ); }
 	}
 	public static function statuses(): array { return array( array( 'created', 'pending' ), array( 'at_terminal', 'pending' ), array( 'action_required', 'in_progress' ), array( 'processed', 'completed' ), array( 'refunded', 'completed' ), array( 'canceled', 'cancelled' ), array( 'expired', 'expired' ), array( 'failed', 'failed' ), array( 'unknown', 'pending' ) ); }
-	public function test_paid_amount_overrides_amount_and_missing_confirmation_is_null(): void {
+	public function test_order_amount_excludes_financing_and_missing_confirmation_is_null(): void {
 		$remote = Transport::fixture( 'order-processed' );
 		$remote['transactions']['payments'][0]['paid_amount'] = '1.00';
 		$this->transport->response_override = Transport::response( $remote );
-		$this->assertSame( '1.00', $this->adapter->fetch( 'ORD1' )['amount'] );
+		$this->assertSame( '24.00', $this->adapter->fetch( 'ORD1' )['amount'] );
 		unset( $remote['transactions']['payments'][0]['paid_amount'] );
 		$this->transport->response_override = Transport::response( $remote );
 		$this->assertSame( '24.00', $this->adapter->fetch( 'ORD1' )['amount'] );
@@ -62,16 +62,20 @@ class Test_Provider_Adapter extends \WP_UnitTestCase {
 	}
 	public static function order_stores(): array { return array( array( false ), array( true ) ); }
 	/** @dataProvider order_stores */
-	public function test_404_grace_reads_persisted_row_age( bool $hpos ): void {
+	public function test_404_grace_reads_persisted_expiry( bool $hpos ): void {
 		update_option( 'woocommerce_custom_orders_table_enabled', $hpos ? 'yes' : 'no' );
 		$this->assertSame( $hpos, \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled() );
 		list( $order, $row ) = $this->create();
 		$row = wcpos_pro_adopt_legacy_attempt( $order, Settings::GATEWAY_ID, $row['provider_refs']['action'], '24.00', 'EUR' );
+		$row['created_at_gmt'] = gmdate( 'c', time() - 120 );
+		$row['expires_at'] = gmdate( 'c', time() + 300 );
+		Ledger::instance()->save( $order, array( $row ), false );
 		$this->transport->response_override = Transport::response( array(), 404 );
 		$this->assertSame( 'pending', ( new Provider_Adapter() )->fetch( $row['provider_refs']['action'] )['status'] );
-		$row['created_at_gmt'] = gmdate( 'c', time() - 61 );
+		$row['created_at_gmt'] = gmdate( 'c' );
+		$row['expires_at'] = gmdate( 'c', time() - 1 );
 		Ledger::instance()->save( $order, array( $row ), false );
-		$this->assertSame( array( 'status' => 'failed', 'failure_reason' => 'provider_error' ), $this->adapter->fetch( $row['provider_refs']['action'] ) );
+		$this->assertSame( array( 'status' => 'failed', 'failure_reason' => 'expired' ), $this->adapter->fetch( $row['provider_refs']['action'] ) );
 	}
 	/** @dataProvider errors */
 	public function test_error_classification( int $status, bool $indeterminate ): void {
@@ -82,7 +86,7 @@ class Test_Provider_Adapter extends \WP_UnitTestCase {
 		$this->assertSame( 502, $error->get_error_data()['status'] );
 		if ( $status ) { $this->assertSame( 'API message', $error->get_error_message() ); }
 	}
-	public static function errors(): array { return array( array( 0, true ), array( 500, true ), array( 503, true ), array( 409, true ), array( 429, true ), array( 400, false ), array( 401, false ), array( 403, false ) ); }
+	public static function errors(): array { return array( array( 0, true ), array( 500, true ), array( 503, true ), array( 409, false ), array( 429, true ), array( 400, false ), array( 401, false ), array( 403, false ) ); }
 	public function test_throwables_are_indeterminate_for_every_client_operation(): void {
 		list( $order, $row ) = $this->create();
 		$request = $this->transport->webhook_request( 'completed' );
@@ -125,7 +129,7 @@ class Test_Provider_Adapter extends \WP_UnitTestCase {
 		$row['provider_refs']['payment_id'] = 'PAY1';
 		$this->assertSame( array( 'status' => $expected, 'provider_ref' => 'REFnew' ), $this->adapter->refund( $row, 9, '5.00' ) );
 	}
-	public static function refund_states(): array { return array( array( 'processed', 'succeeded' ), array( 'pending', 'pending' ), array( 'in_process', 'pending' ), array( 'failed', 'failed' ) ); }
+	public static function refund_states(): array { return array( array( 'processed', 'succeeded' ), array( 'pending', 'pending' ), array( 'in_process', 'pending' ), array( 'processing', 'pending' ), array( 'unknown', 'pending' ), array( 'failed', 'failed' ), array( 'rejected', 'failed' ), array( 'cancelled', 'failed' ), array( 'canceled', 'failed' ) ); }
 	public function test_empty_action_falls_back_to_historical_transaction_reference(): void {
 		list( $order, $row ) = $this->create();
 		$row['provider_refs'] = array( 'action' => '', 'transaction_id' => 'ORD1' );
@@ -158,5 +162,96 @@ class Test_Provider_Adapter extends \WP_UnitTestCase {
 		$this->assertSame( 'captured', $result['patch']['status'] );
 		$this->assertSame( 'ORD1', $result['patch']['provider_refs']['transaction_id'] );
 		$this->assertSame( 'conformance-request', $result['patch']['event_id'] );
+	}
+	public function test_cancel_cannot_cancel_order_is_terminal_only(): void {
+		$this->transport->response_override = Transport::response( array( 'errors' => array( array( 'code' => 'cannot_cancel_order' ) ) ), 409 );
+		$error = $this->adapter->fetch( 'ORD1' );
+		$this->assertSame( 409, $error->get_error_data()['http_status'] ?? null );
+		$this->assertSame( 'cannot_cancel_order', $error->get_error_data()['error_code'] ?? null );
+		$this->assertEmpty( $error->get_error_data()['indeterminate'] ?? false );
+		$error = $this->adapter->cancel( 'ORD1' );
+		$this->assertSame( 'wcpos_capture_mode_unsupported', $error->get_error_code() );
+		$this->assertSame( 501, $error->get_error_data()['status'] );
+		$this->assertStringContainsString( 'Cancel it on the terminal', $error->get_error_message() );
+	}
+	public function test_cancel_order_already_canceled_is_requested(): void {
+		$this->transport->response_override = Transport::response( array( 'errors' => array( array( 'code' => 'order_already_canceled' ) ) ), 409 );
+		$this->assertSame( 'requested', $this->adapter->cancel( 'ORD1' ) );
+	}
+	public function test_create_terminal_busy_is_determinate(): void {
+		list( $order, $row ) = $this->create();
+		$this->transport->response_override = Transport::response( array( 'errors' => array( array( 'code' => 'already_queued_order_for_terminal' ) ) ), 409 );
+		$error = $this->adapter->create_reader_action( $row, 'reader-1' );
+		$this->assertSame( 'mercadopago_terminal_busy', $error->get_error_code() );
+		$this->assertSame( 409, $error->get_error_data()['status'] );
+		$this->assertEmpty( $error->get_error_data()['indeterminate'] ?? false );
+		$this->assertSame( 'The terminal is still busy with an earlier order. Finish or cancel it on the terminal, then try again.', $error->get_error_message() );
+	}
+	public function test_idempotency_conflict_is_indeterminate_with_details(): void {
+		$this->transport->response_override = Transport::response( array( 'errors' => array( array( 'code' => 'idempotency_key_already_used' ) ) ), 409 );
+		$error = $this->adapter->cancel( 'ORD1' );
+		$this->assertTrue( $error->get_error_data()['indeterminate'] );
+		$this->assertSame( 409, $error->get_error_data()['http_status'] ?? null );
+		$this->assertSame( 'idempotency_key_already_used', $error->get_error_data()['error_code'] ?? null );
+	}
+	public static function query_ids(): array { return array( array( 'data.id' ), array( 'data_id' ), array( 'id' ) ); }
+	/** @dataProvider query_ids */
+	public function test_signed_query_id_is_accepted( string $key ): void {
+		list( $order, $row ) = $this->create();
+		$request = $this->transport->webhook_request( 'completed' );
+		$body = $request->get_json_params(); unset( $body['data']['id'] );
+		$request->set_body( wp_json_encode( $body ) );
+		$request->set_query_params( array( 'provider' => 'mercadopago', $key => 'ORD1' ) );
+		$result = $this->adapter->verify_webhook( $request );
+		$this->assertNotWPError( $result );
+		$this->assertSame( $row['id'], $result['payment_id'] );
+		$request->set_query_params( array( 'provider' => 'mercadopago', $key => 'tampered' ) );
+		$this->assertSame( 401, $this->adapter->verify_webhook( $request )->get_error_data()['status'] );
+	}
+	public static function ignored_notifications(): array { return array( array( 'unrelated' ), array( 'legacy-unmapped' ), array( 'invalid-uuid' ), array( 'type' ), array( 'topic' ) ); }
+	/** @dataProvider ignored_notifications */
+	public function test_unrelated_signed_webhook_dispatches_200( string $kind ): void {
+		$this->create();
+		$request = $this->transport->webhook_request( 'completed' );
+		if ( in_array( $kind, array( 'type', 'topic' ), true ) ) {
+			$body = $request->get_json_params(); unset( $body['type'] ); $body[ $kind ] = 'payment';
+			$request->set_body( wp_json_encode( $body ) );
+		} else {
+			$this->transport->orders['ORD1']['data']['external_reference'] = array( 'unrelated' => 'other-store', 'legacy-unmapped' => 'wcpos-123-abcd', 'invalid-uuid' => 'wcpos_not-a-uuid' )[ $kind ];
+		}
+		global $wp_rest_server;
+		$old_server = $wp_rest_server; $wp_rest_server = null;
+		try {
+			$server = rest_get_server();
+			( new \WCPOS\WooCommercePOSPro\API\V2\Payments_Webhook_Controller() )->register_routes();
+			$count = count( $this->transport->raw_calls );
+			$response = $server->dispatch( $request );
+			$this->assertSame( 200, $response->get_status() );
+			$this->assertSame( 'mercadopago_ignored', $response->get_data()['code'] ?? null );
+			if ( in_array( $kind, array( 'type', 'topic' ), true ) ) { $this->assertCount( $count, $this->transport->raw_calls ); }
+		} finally { $wp_rest_server = $old_server; }
+	}
+	public function test_completed_currency_uses_provider_then_store_fallback(): void {
+		update_option( 'woocommerce_currency', 'USD' );
+		$remote = Transport::fixture( 'order-processed' );
+		$remote['currency'] = 'ARS';
+		$this->transport->response_override = Transport::response( $remote );
+		$this->assertSame( 'ARS', $this->adapter->fetch( 'ORD1' )['currency'] );
+		unset( $remote['currency'] );
+		$this->transport->response_override = Transport::response( $remote );
+		$this->assertSame( 'USD', $this->adapter->fetch( 'ORD1' )['currency'] );
+	}
+	public function test_ars_order_cannot_settle_usd_payment(): void {
+		update_option( 'woocommerce_currency', 'USD' );
+		list( $order, $row ) = $this->create();
+		$order->set_currency( 'USD' ); $order->save();
+		$row = wcpos_pro_adopt_legacy_attempt( $order, Settings::GATEWAY_ID, 'ORD1', '24.00', 'USD' );
+		$request = $this->transport->webhook_request( 'completed' );
+		$this->transport->orders['ORD1']['data']['currency'] = 'ARS';
+		$verified = $this->adapter->verify_webhook( $request );
+		$result = wcpos_settle_payment( $verified['payment_id'], $verified['patch'] );
+		$this->assertWPError( $result );
+		$this->assertSame( 'wcpos_amount_mismatch', $result->get_error_code() );
+		$this->assertSame( 'failed', Ledger::instance()->find( wc_get_order( $order->get_id() ), $row['id'] )['status'] );
 	}
 }

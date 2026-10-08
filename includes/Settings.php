@@ -22,5 +22,5 @@ class Settings {
 	public function webhook_secret(): string { return trim( (string) $this->get( 'webhook_secret', '' ) ); }
 
 	public function mode(): string { return 'live' === $this->get( 'mode', 'test' ) ? 'live' : 'test'; }
-	public function webhook_url(): string { return rest_url( 'wcpos/v2/payments/webhook' ) . '?provider=mercadopago'; }
+	public function webhook_url(): string { return add_query_arg( 'provider', 'mercadopago', rest_url( 'wcpos/v2/payments/webhook' ) ); }
 }

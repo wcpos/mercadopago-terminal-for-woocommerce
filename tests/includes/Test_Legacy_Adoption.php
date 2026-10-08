@@ -41,4 +41,52 @@ class Test_Legacy_Adoption extends \WP_UnitTestCase {
 			$this->assertSame( array(), $transport->transcript() );
 		} finally { $transport->uninstall(); }
 	}
+	/** @dataProvider order_stores */
+	public function test_thirty_legacy_orders_finish_in_two_init_pages_and_skip_logged_error( bool $hpos ): void {
+		update_option( 'woocommerce_custom_orders_table_enabled', $hpos ? 'yes' : 'no' );
+		$transport = new Transport(); $transport->install();
+		$orders = array();
+		for ( $i = 0; $i < 30; ++$i ) {
+			$order = wc_create_order(); $order->set_total( '24.00' ); $order->set_currency( 'EUR' );
+			$order->update_meta_data( Legacy_Adoption::META_CURRENT_MP_ORDER_ID, 'ORDpage' . $i );
+			$order->update_meta_data( Legacy_Adoption::META_CURRENT_STATUS, 'created' ); $order->save(); $orders[] = $order;
+		}
+		$lock = new \WCPOS\WooCommercePOS\Payments\Contract\Order_Lock();
+		$this->assertTrue( $lock->acquire( $orders[0]->get_id() ) );
+		// Isolate init: repeating all of WordPress init reruns unrelated Free migrations.
+		global $wp_filter;
+		$old_init = $wp_filter['init'];
+		$wp_filter['init'] = new \WP_Hook();
+		$old_logger = wc_get_logger();
+		$logger = $this->getMockBuilder( \WC_Logger::class )->setConstructorArgs( array( array(), 'debug' ) )->onlyMethods( array( 'error' ) )->getMock();
+		$logger->expects( $this->once() )->method( 'error' )->with(
+			$this->callback( static function ( $message ) use ( $orders ) { return false !== strpos( $message, (string) $orders[0]->get_id() ) && false !== strpos( $message, 'wcpos_payment_locked' ); } ),
+			$this->equalTo( array( 'source' => 'mercadopago-terminal' ) )
+		);
+		$logging = static function () use ( &$logger ) { return $logger; };
+		add_filter( 'woocommerce_logging_class', $logging );
+		try {
+			update_option( 'mptfwc_version', '0.1.0' ); delete_option( 'mptfwc_adoption_offset' );
+			\WCPOS\WooCommercePOS\MercadoPagoTerminal\init();
+			$this->assertSame( 20, has_action( 'init', array( Legacy_Adoption::class, 'upgrade' ) ) );
+			do_action( 'init' );
+			$this->assertSame( 25, get_option( 'mptfwc_adoption_offset' ) );
+			$this->assertSame( '0.1.0', get_option( 'mptfwc_version' ) );
+			$this->assertCount( 0, Ledger::instance()->read( wc_get_order( $orders[0]->get_id() ) ) );
+			$adopted = 0;
+			foreach ( $orders as $order ) { $adopted += count( Ledger::instance()->read( wc_get_order( $order->get_id() ) ) ); }
+			$this->assertSame( 24, $adopted );
+			$lock->release( $orders[0]->get_id() );
+			do_action( 'init' );
+			$this->assertFalse( get_option( 'mptfwc_adoption_offset' ) );
+			$this->assertSame( '1.0.0', get_option( 'mptfwc_version' ) );
+			foreach ( $orders as $i => $order ) { $this->assertCount( 0 === $i ? 0 : 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) ); }
+			$this->assertSame( array(), $transport->transcript() );
+		} finally {
+			$lock->release( $orders[0]->get_id() );
+			$wp_filter['init'] = $old_init;
+			$logger = $old_logger; wc_get_logger(); remove_filter( 'woocommerce_logging_class', $logging );
+			$transport->uninstall();
+		}
+	}
 }

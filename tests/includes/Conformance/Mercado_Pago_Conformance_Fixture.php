@@ -129,17 +129,17 @@ final class Mercado_Pago_Conformance_Fixture implements Conformance_Fixture {
 		if ( ! isset( $this->orders[ $ref ] ) || $mode !== $this->orders[ $ref ]['mode'] ) { return self::response( array( 'message' => 'Not found' ), 404 ); }
 		$order = &$this->orders[ $ref ];
 		if ( 'cancel' === $op ) {
-			return 'cancel_unsupported' === $this->scenario ? self::response( self::fixture( 'error-400' ), 400 ) : self::response( array() );
+			return 'cancel_unsupported' === $this->scenario ? self::response( array( 'errors' => array( array( 'code' => 'cannot_cancel_order', 'message' => 'Cannot cancel order.' ) ) ), 409 ) : self::response( array() );
 		}
 		if ( 'refund' === $op ) {
-			$order['data']['transactions']['refunds'][] = array( 'id' => 'REF1', 'status' => array( 'refund_pending' => 'pending', 'refund_failed' => 'failed' )[ $this->scenario ] ?? 'processed' );
+			$order['data']['transactions']['refunds'][] = array( 'id' => 'REF1', 'status' => array( 'refund_pending' => 'processing', 'refund_failed' => 'failed' )[ $this->scenario ] ?? 'processed' );
 			return self::response( $order['data'] );
 		}
 		if ( ! $this->webhook_read ) {
 			$order['data']['status'] = count( $order['states'] ) > 1 ? array_shift( $order['states'] ) : $order['states'][0];
 		}
 		$order['data']['status_detail'] = 'failed' === $order['data']['status'] ? 'card_declined' : $order['data']['status'];
-		if ( 'amount_mismatch' === $this->scenario ) { $order['data']['transactions']['payments'][0]['paid_amount'] = '1.00'; }
+		if ( 'amount_mismatch' === $this->scenario ) { $order['data']['transactions']['payments'][0]['amount'] = '1.00'; }
 		return self::response( $order['data'] );
 	}
 	public function webhook_request( string $event ): \WP_REST_Request {

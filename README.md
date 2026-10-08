@@ -18,11 +18,11 @@ This is the `next` / 2.0 integration. The `main` / 0.x line is separate. This re
 
 The app's terminal flow and the eligible order-pay page use the same provider adapter. The order-pay panel belongs to Pro and appears for the POS webview or an authenticated POS user with the required order permissions. It is not a storefront-customer terminal UI. Leave the web-checkout enable switch off for POS-only use: as specified, gateway availability checks only WooCommerce availability and token presence, so enabling it can expose a method to storefront customers who cannot use the panel.
 
-Pro/Free own the ledger, payment UUID, reader curation, polling, locking, reconciliation, settlement, and redirects. Create requests use the payment UUID as their idempotency key and `wcpos:<UUID>` as their external reference. No automatic transport retries are made by this extension.
+Pro/Free own the ledger, payment UUID, reader curation, polling, locking, reconciliation, settlement, and redirects. Create requests use the payment UUID as their idempotency key and `wcpos_<UUID>` as their external reference. No automatic transport retries are made by this extension.
 
 Point auto-captures; cashier prompts and manual capture are unsupported. API cancellation is requested, not presumed complete. If the terminal already picked up the order, cancel on the terminal or wait for provider expiry. The default expiry is five minutes (`mptfwc_order_expiration_time`).
 
-The Orders API carries no currency. The adapter reports the store currency because Point charges in the Mercado Pago account's local currency: **configure the store and seller account to use the same currency**.
+The adapter reports the order's currency when supplied by Mercado Pago, falling back to the store currency when absent. **Configure the store and seller account to use the same currency**; a provider currency mismatch fails settlement.
 
 ## Refunds
 
@@ -32,7 +32,7 @@ Provider refusals remain errors; do not assume a pending refund has succeeded. C
 
 ## Upgrading from 0.x
 
-A one-time upgrade adopts non-final legacy attempts into Pro's ledger without creating a second provider order. Old `_mptfwc_*` metadata remains inert. Adoption requires a known MP order ID; a legacy indeterminate create with no returned MP ID cannot be adopted by this routine. The old reconciliation cron is cleared. Pro now owns the payment panel, reader settings, support bundle, and reconciliation.
+A one-time upgrade adopts non-final legacy attempts into Pro's ledger without creating a second provider order. Old `_mptfwc_*` metadata remains inert. Adoption requires a known MP order ID; a legacy indeterminate create with no returned MP ID cannot be adopted by this routine. Adoption processes up to 25 orders per `init`, saving its offset until a short page completes the upgrade. Failed orders are logged (order ID and error code) and skipped, not automatically retried; review these failures for manual reconciliation. The old reconciliation cron is cleared. Pro now owns the payment panel, reader settings, support bundle, and reconciliation.
 
 ### Behavior changes / regressions
 
@@ -54,13 +54,13 @@ No seller sandbox account or physical Point terminal was exercised for this rele
 
 ## Development
 
-The WordPress tests require a composer-installed Pro `next` checkout at `../woocommerce-pos-pro`, with Free vendored by Pro. `.wp-env.json` mounts WooCommerce, Pro, and this extension. From a running environment, use the mounted extension directory name:
+The WordPress tests require a composer-installed Pro `next` checkout at `../woocommerce-pos-pro`, with Free vendored by Pro. `.wp-env.json` mounts WooCommerce, Pro, and this extension. From a running environment, derive the mounted extension directory from the checkout name with `$(basename "$PWD")` (as the package scripts do). The default checkout name is `mercadopago-terminal-for-woocommerce`:
 
 ```sh
-npx wp-env run --env-cwd='wp-content/plugins/95-mp-1.0' tests-cli -- vendor/bin/phpunit -c phpunit.xml.dist --filter 'Tests\\Conformance\\'
-npx wp-env run --env-cwd='wp-content/plugins/95-mp-1.0' tests-cli -- vendor/bin/phpunit -c phpunit.xml.dist --filter 'Tests\\Includes\\'
+npx wp-env run --env-cwd="wp-content/plugins/$(basename "$PWD")" tests-cli -- vendor/bin/phpunit -c phpunit.xml.dist --filter 'Tests\\Conformance\\'
+npx wp-env run --env-cwd="wp-content/plugins/$(basename "$PWD")" tests-cli -- vendor/bin/phpunit -c phpunit.xml.dist --filter 'Tests\\Includes\\'
 ```
 
 Always select with `--filter`, not a directory argument. To record **missing** goldens once, insert `env WCPOS_RECORD_TRANSCRIPTS=1` before `vendor/bin/phpunit`. Review the JSON in `tests/includes/Conformance/transcripts`, rerun without recording, then commit it. CI never records.
 
-The fixture uses the real gateway, adapter, HTTP client, Pro handlers, and Free ledger. Only Mercado Pago HTTP is faked. Transcript `webhook` means the authoritative GET triggered by a signed notification; `fetch` means an ordinary poll/refund lookup. Currency mismatch changes the store currency after create because MP order responses have no currency field. The adoption scenario models an old provider action by removing its new-style external reference. Prompts, manual capture, and final cancellation are explicitly skipped.
+The fixture uses the real gateway, adapter, HTTP client, Pro handlers, and Free ledger. Only Mercado Pago HTTP is faked. Transcript `webhook` means the authoritative GET triggered by a signed notification; `fetch` means an ordinary poll/refund lookup. Currency mismatch changes the store currency after create to exercise the fallback for responses that omit currency; unit tests also cover explicit provider currency mismatches. The adoption scenario models an old provider action by removing its new-style external reference. Prompts, manual capture, and final cancellation are explicitly skipped.

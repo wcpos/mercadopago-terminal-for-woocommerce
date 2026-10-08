@@ -11,7 +11,7 @@ class Test_Gateway extends \WP_UnitTestCase {
 	public function test_fields_availability_and_masked_secrets(): void {
 		$gateway = new Gateway();
 		$this->assertSame( array( 'enabled', 'title', 'description', 'mode', 'access_token', 'webhook_secret' ), array_keys( $gateway->form_fields ) );
-		$this->assertStringContainsString( 'wcpos/v2/payments/webhook', $gateway->form_fields['webhook_secret']['description'] );
+		$this->assertStringContainsString( 'wcpos/v2/payments/webhook', rawurldecode( $gateway->form_fields['webhook_secret']['description'] ) );
 		$this->assertTrue( $gateway->is_available() );
 		$gateway->enabled = 'no'; $this->assertFalse( $gateway->is_available() ); $gateway->enabled = 'yes';
 		$this->assertStringNotContainsString( 'TEST-conformance', $gateway->generate_mptfwc_secret_html( 'access_token', $gateway->form_fields['access_token'] ) );
@@ -43,5 +43,11 @@ class Test_Gateway extends \WP_UnitTestCase {
 		wp_set_current_user( 0 );
 		$this->expectException( \WPDieException::class );
 		Gateway::set_pdv();
+	}
+	public function test_webhook_url_with_plain_permalinks(): void {
+		update_option( 'permalink_structure', '' );
+		$url = ( new Settings() )->webhook_url();
+		$this->assertSame( 1, substr_count( $url, '?' ) );
+		$this->assertStringContainsString( 'provider=mercadopago', $url );
 	}
 }
