@@ -10,6 +10,12 @@ class Test_Provider_Adapter extends \WP_UnitTestCase {
 	protected $adapter;
 	public function setUp(): void { parent::setUp(); $this->transport = new Transport(); $this->transport->install(); $this->adapter = new Provider_Adapter(); }
 	public function tearDown(): void { $this->transport->uninstall(); parent::tearDown(); }
+	/** A row Pro would hand to a FIRST create: minted, never sent. */
+	private function fresh_row(): array {
+		$order = wc_create_order();
+		$order->set_total( '24.00' ); $order->set_currency( 'EUR' ); $order->save();
+		return array( $order, array( 'id' => wp_generate_uuid4(), 'order_id' => $order->get_id(), 'amount' => '24.00', 'currency' => 'EUR' ) );
+	}
 	private function create(): array {
 		$order = wc_create_order();
 		$order->set_total( '24.00' ); $order->set_currency( 'EUR' ); $order->save();
@@ -179,13 +185,34 @@ class Test_Provider_Adapter extends \WP_UnitTestCase {
 		$this->assertSame( 'requested', $this->adapter->cancel( 'ORD1' ) );
 	}
 	public function test_create_terminal_busy_is_determinate(): void {
-		list( $order, $row ) = $this->create();
+		list( $order, $row ) = $this->fresh_row(); // A first attempt: nothing of ours can be on the terminal.
 		$this->transport->response_override = Transport::response( array( 'errors' => array( array( 'code' => 'already_queued_order_for_terminal' ) ) ), 409 );
 		$error = $this->adapter->create_reader_action( $row, 'reader-1' );
 		$this->assertSame( 'mercadopago_terminal_busy', $error->get_error_code() );
 		$this->assertSame( 409, $error->get_error_data()['status'] );
 		$this->assertEmpty( $error->get_error_data()['indeterminate'] ?? false );
 		$this->assertSame( 'The terminal is still busy with an earlier order. Finish or cancel it on the terminal, then try again.', $error->get_error_message() );
+	}
+	/** Reviewer pass 2: a busy terminal on a REPLAYED create may be our own unanswered order — never a final failure. */
+	public function test_create_terminal_busy_on_replay_is_indeterminate(): void {
+		list( $order, $row ) = $this->fresh_row();
+		$this->transport->response_override = new \WP_Error( 'http_request_failed', 'timed out' );
+		$first = $this->adapter->create_reader_action( $row, 'reader-1' );
+		$this->assertTrue( $first->get_error_data()['indeterminate'] );
+		$this->transport->response_override = Transport::response( array( 'errors' => array( array( 'code' => 'already_queued_order_for_terminal' ) ) ), 409 );
+		$replay = $this->adapter->create_reader_action( $row, 'reader-1' );
+		$this->assertSame( 'mercadopago_terminal_busy', $replay->get_error_code() );
+		$this->assertTrue( $replay->get_error_data()['indeterminate'], 'A replay must keep the row pending so the webhook or sweeper can settle the order on the terminal' );
+		// A different row's first attempt is still a final refusal.
+		list( $order2, $row2 ) = $this->fresh_row();
+		$final = $this->adapter->create_reader_action( $row2, 'reader-1' );
+		$this->assertEmpty( $final->get_error_data()['indeterminate'] ?? false );
+	}
+	public function test_resource_locked_423_is_indeterminate(): void {
+		$this->transport->response_override = Transport::response( array( 'errors' => array( array( 'code' => 'resource_locked' ) ) ), 423 );
+		$error = $this->adapter->cancel( 'ORD1' );
+		$this->assertTrue( $error->get_error_data()['indeterminate'] );
+		$this->assertSame( 423, $error->get_error_data()['http_status'] );
 	}
 	public function test_idempotency_conflict_is_indeterminate_with_details(): void {
 		$this->transport->response_override = Transport::response( array( 'errors' => array( array( 'code' => 'idempotency_key_already_used' ) ) ), 409 );

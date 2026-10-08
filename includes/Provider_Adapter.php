@@ -25,7 +25,8 @@ class Provider_Adapter extends Abstract_Provider_Adapter {
 			$message = Redactor::message( $e->getMessage() );
 			// Per the reference, only an idempotency-key conflict leaves a 409 ambiguous.
 			$data = array( 'status' => 502, 'http_status' => $status, 'error_code' => $error_code );
-			if ( $status < 400 || $status >= 500 || 429 === $status || ( 409 === $status && 'idempotency_key_already_used' === $error_code ) ) {
+			// 423 resource_locked: the idempotency key is still held by the first request — equally ambiguous.
+			if ( $status < 400 || $status >= 500 || in_array( $status, array( 423, 429 ), true ) || ( 409 === $status && 'idempotency_key_already_used' === $error_code ) ) {
 				$data['indeterminate'] = true;
 			}
 			return new \WP_Error( $code, $message, $data );
@@ -43,6 +44,12 @@ class Provider_Adapter extends Abstract_Provider_Adapter {
 	public function create_reader_action( array $row, string $reader_id ) {
 		$order = wc_get_order( $row['order_id'] );
 		$duration = (string) apply_filters( 'mptfwc_order_expiration_time', 'PT5M', $order );
+		// A create that got no answer may still have put OUR order on the terminal; Pro replays the
+		// same row later. Remember that a create was sent before the call, so a "terminal busy" on
+		// the replay is treated as ambiguous (keep polling) rather than as a final refusal that
+		// would mark a payment failed while the customer pays it. An hour outlives any PT5M order.
+		$replayed = (bool) get_transient( 'mptfwc_sent_' . $row['id'] );
+		set_transient( 'mptfwc_sent_' . $row['id'], 1, HOUR_IN_SECONDS );
 		// Per the reference, external_reference permits letters, digits, hyphen and underscore, not colon.
 		$result = $this->call( 'create_order', array( array(
 			'type' => 'point', 'external_reference' => 'wcpos_' . $row['id'],
@@ -52,7 +59,10 @@ class Provider_Adapter extends Abstract_Provider_Adapter {
 		), $row['id'] ) );
 		if ( is_wp_error( $result ) ) {
 			if ( 409 === ( $result->get_error_data()['http_status'] ?? 0 ) && 'already_queued_order_for_terminal' === ( $result->get_error_data()['error_code'] ?? '' ) ) {
-				return new \WP_Error( 'mercadopago_terminal_busy', __( 'The terminal is still busy with an earlier order. Finish or cancel it on the terminal, then try again.', 'mercadopago-terminal-for-woocommerce' ), array( 'status' => 409 ) );
+				$message = __( 'The terminal is still busy with an earlier order. Finish or cancel it on the terminal, then try again.', 'mercadopago-terminal-for-woocommerce' );
+				// First attempt: another order holds the terminal, nothing of ours exists — final.
+				// Replay: the order holding the terminal may be ours from the unanswered create — ambiguous.
+				return $replayed ? $this->indeterminate( 'mercadopago_terminal_busy', $message ) : new \WP_Error( 'mercadopago_terminal_busy', $message, array( 'status' => 409 ) );
 			}
 			return $result;
 		}
