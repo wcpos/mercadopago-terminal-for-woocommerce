@@ -1,7 +1,7 @@
 <?php
 namespace WCPOS\WooCommercePOS\MercadoPagoTerminal\Services;
 
-use WCPOS\WooCommercePOS\MercadoPagoTerminal\Logger;
+use WCPOS\WooCommercePOSPro\Payments\Server\Redactor;
 
 class MercadoPagoClient {
 	public const BASE_URL = 'https://api.mercadopago.com';
@@ -54,7 +54,6 @@ class MercadoPagoClient {
 
 	private function request( string $method, string $path, ?array $body = null, string $idempotency_key = '', int $timeout = 0 ): array {
 		if ( ! $this->has_access_token() ) {
-			Logger::log_api_error( 'Mercado Pago access token is missing.', array( 'method' => $method, 'path' => $path ) );
 			throw new MercadoPagoApiException( 'Mercado Pago access token is missing.' );
 		}
 		$args = array(
@@ -64,12 +63,12 @@ class MercadoPagoClient {
 		);
 		if ( '' !== $idempotency_key ) { $args['headers']['X-Idempotency-Key'] = $idempotency_key; }
 		if ( null !== $body ) { $args['body'] = wp_json_encode( $body ); }
-		Logger::log( 'Mercado Pago API request: ' . $method . ' ' . $path, array( 'method' => $method, 'url' => self::BASE_URL . $path, 'headers' => $args['headers'], 'body' => $body, 'timeout' => $args['timeout'] ), 'debug' );
-		$start = Logger::timer();
+		wc_get_logger()->debug( 'Mercado Pago API request', Redactor::sanitize( array( 'source' => 'mercadopago-terminal', 'method' => $method, 'path' => $path, 'body' => $body, 'idempotency_key' => $idempotency_key ) ) );
+		$start = microtime( true );
 		$response = wp_remote_request( self::BASE_URL . $path, $args );
-		$duration = Logger::elapsed_ms( $start );
+		$duration = (int) round( ( microtime( true ) - $start ) * 1000 );
 		if ( is_wp_error( $response ) ) {
-			Logger::log_api_error( 'Mercado Pago API transport error: ' . $response->get_error_message(), array( 'method' => $method, 'path' => $path, 'duration_ms' => $duration, 'error_code' => $response->get_error_code() ) );
+			wc_get_logger()->debug( 'Mercado Pago API response', Redactor::sanitize( array( 'source' => 'mercadopago-terminal', 'error' => $response->get_error_message() ) ) );
 			throw new MercadoPagoApiException( 'Mercado Pago API request failed.', 0 );
 		}
 		$status = (int) wp_remote_retrieve_response_code( $response );
@@ -77,16 +76,14 @@ class MercadoPagoClient {
 		$data   = '' === $raw ? array() : json_decode( $raw, true );
 		$headers = function_exists( 'wp_remote_retrieve_headers' ) ? wp_remote_retrieve_headers( $response ) : array();
 		$context = array( 'method' => $method, 'path' => $path, 'status' => $status, 'duration_ms' => $duration, 'response_headers' => $headers instanceof \Traversable ? iterator_to_array( $headers ) : (array) $headers, 'body' => '' !== $raw && is_array( $data ) ? $data : $raw );
-		Logger::log( sprintf( 'Mercado Pago API response: %s %s HTTP %d in %d ms', $method, $path, $status, $duration ), $context, 'debug' );
+		wc_get_logger()->debug( 'Mercado Pago API response', Redactor::sanitize( array( 'source' => 'mercadopago-terminal' ) + $context ) );
 		if ( $status < 200 || $status >= 300 ) {
 			$data = is_array( $data ) ? $data : array();
 			$message = $data['errors'][0]['message'] ?? $data['message'] ?? $data['error'] ?? 'Mercado Pago API error.';
 			$code    = $data['errors'][0]['code'] ?? $data['error'] ?? '';
-			Logger::log_api_error( sprintf( 'Mercado Pago API error (%s %s, HTTP %d): %s', $method, $path, $status, $message ), $context + array( 'error_code' => $code ) );
 			throw new MercadoPagoApiException( $message, $status, $code, $data );
 		}
 		if ( ! is_array( $data ) ) {
-			Logger::log_api_error( 'Mercado Pago API returned an invalid response.', $context + array( 'error_code' => '' ) );
 			throw new MercadoPagoApiException( 'Mercado Pago API returned an invalid response.', $status );
 		}
 		return $data;

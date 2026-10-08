@@ -1,14 +1,14 @@
 <?php
 /**
  * Plugin Name: Mercado Pago Terminal for WooCommerce
- * Description: Adds Mercado Pago Point Smart terminal support to WooCommerce for in-person payments.
- * Version:     0.1.0
+ * Description: Adds Mercado Pago Point Smart terminal support to WooCommerce for in-person payments. Requires WooCommerce POS Pro 2.0.
+ * Version:     1.0.0
  * Author:      kilbot
  * Author URI:  https://kilbot.com/
  * Update URI:  https://github.com/wcpos/mercadopago-terminal-for-woocommerce
  * License:     GPL v3 or later
  * Text Domain: mercadopago-terminal-for-woocommerce
- * Requires at least: 5.2
+ * Requires at least: 6.0
  * Requires PHP:      7.4
  * Requires Plugins:  woocommerce
  */
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'MPTFWC_VERSION', '0.1.0' );
+define( 'MPTFWC_VERSION', '1.0.0' );
 define( 'MPTFWC_PLUGIN_FILE', __FILE__ );
 define( 'MPTFWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MPTFWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -44,31 +44,18 @@ spl_autoload_register(
 	}
 );
 
-function mptfwc_activate(): void {
-	if ( PHP_VERSION_ID >= MPTFWC_MINIMUM_PHP_VERSION_ID ) {
+function init(): void {
+	if ( ! function_exists( 'wcpos_pro_requires' ) || ! wcpos_pro_requires( '2.0.0', __FILE__ ) ) {
+		add_action( 'admin_notices', static function () {
+			echo '<div class="notice notice-error"><p>' . esc_html__( 'Mercado Pago Terminal requires WooCommerce POS Pro 2.0 or newer.', 'mercadopago-terminal-for-woocommerce' ) . '</p></div>';
+		} );
 		return;
 	}
-	deactivate_plugins( plugin_basename( __FILE__ ) );
-	wp_die( esc_html( sprintf( __( 'Mercado Pago Terminal for WooCommerce requires PHP %1$s or newer. Your server is running PHP %2$s.', 'mercadopago-terminal-for-woocommerce' ), MPTFWC_MINIMUM_PHP_VERSION, PHP_VERSION ) ) );
-}
-register_activation_hook( __FILE__, __NAMESPACE__ . '\\mptfwc_activate' );
-
-function mptfwc_deactivate(): void { PaymentSweeper::unschedule(); }
-register_deactivation_hook( __FILE__, __NAMESPACE__ . '\\mptfwc_deactivate' );
-
-function load_textdomain(): void {
-	load_plugin_textdomain( 'mercadopago-terminal-for-woocommerce', false, dirname( plugin_basename( MPTFWC_PLUGIN_FILE ) ) . '/languages' );
-}
-add_action( 'init', __NAMESPACE__ . '\\load_textdomain' );
-
-function init(): void {
-	Logger::configure( ( new Settings() )->log_level() );
 	add_filter( 'woocommerce_payment_gateways', array( Gateway::class, 'register_gateway' ) );
-	add_action( 'woocommerce_create_refund', array( RefundHandler::class, 'remember_refund' ), 10, 2 );
-	new AjaxHandler();
-	new WebhookHandler();
-	new PaymentSweeper();
-	( new SupportBundle() )->register();
-	do_action( 'mptfwc_init' );
+	wcpos_pro_register_server_provider( Settings::GATEWAY_ID, Provider_Adapter::class );
+	add_action( 'init', array( Legacy_Adoption::class, 'upgrade' ), 20 );
+	if ( 'mptfwc_set_pdv' === ( $_REQUEST['action'] ?? '' ) ) {
+		add_action( 'admin_post_mptfwc_set_pdv', array( Gateway::class, 'set_pdv' ) );
+	}
 }
 add_action( 'plugins_loaded', __NAMESPACE__ . '\\init', 11 );

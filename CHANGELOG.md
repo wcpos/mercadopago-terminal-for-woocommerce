@@ -2,6 +2,22 @@
 
 All notable changes to Mercado Pago Terminal for WooCommerce will be documented in this file.
 
+## 1.0.0 - Unreleased
+
+### Changed
+
+- Requires WooCommerce POS Pro 2.0, WordPress 6.0, and PHP 7.4. WooCommerce is the only WordPress plugin-header dependency.
+- Uses Pro's server provider boundary, order-pay panel, reader curation, ledger settlement, reconciliation, refund binding, redaction, and support bundle.
+- Adopts live 0.x attempts once, leaves old metadata in place, and clears the old cron hook.
+- Preserves MP order IDs as transaction references for historical full/partial refunds.
+- Rejects unsigned webhooks and missing secrets; use `/wp-json/wcpos/v2/payments/webhook?provider=mercadopago`.
+- Removes private payment AJAX, scripts, locks, sweepers, logs, support downloads, reader controls, and the `mptfwc_order_payload` filter. External refunds require merchant reconciliation.
+- Replaces stub tests with WordPress integration/conformance tests and reviewed golden transcripts; CI runs against sibling Pro `next`.
+
+### Verification limits
+
+- Automated HTTP-faked tests only; no Mercado Pago sandbox, live payments, hardware certification, or broad 0.x compatibility comparison.
+
 ## 0.1.0 - Unreleased
 
 ### Added
