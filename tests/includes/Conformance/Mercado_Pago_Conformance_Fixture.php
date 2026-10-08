@@ -132,7 +132,7 @@ final class Mercado_Pago_Conformance_Fixture implements Conformance_Fixture {
 			return 'cancel_unsupported' === $this->scenario ? self::response( array( 'errors' => array( array( 'code' => 'cannot_cancel_order', 'message' => 'Cannot cancel order.' ) ) ), 409 ) : self::response( array() );
 		}
 		if ( 'refund' === $op ) {
-			$order['data']['transactions']['refunds'][] = array( 'id' => 'REF1', 'status' => array( 'refund_pending' => 'processing', 'refund_failed' => 'failed' )[ $this->scenario ] ?? 'processed' );
+			$order['data']['transactions']['refunds'][] = array( 'id' => 'REF1', 'amount' => $body['amount'] ?? $order['data']['transactions']['payments'][0]['amount'], 'status' => array( 'refund_pending' => 'processing', 'refund_failed' => 'failed' )[ $this->scenario ] ?? 'processed' );
 			return self::response( $order['data'] );
 		}
 		if ( ! $this->webhook_read ) {

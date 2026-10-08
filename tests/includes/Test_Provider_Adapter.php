@@ -130,12 +130,41 @@ class Test_Provider_Adapter extends \WP_UnitTestCase {
 		$this->adapter->refund( $row, 8, '5.00' );
 		$this->assertSame( array( 'amount' => '5.00', 'transaction_id' => 'PAY1' ), json_decode( end( $this->transport->raw_calls )['args']['body'], true ) );
 		$remote = Transport::fixture( 'order-refunded' );
-		$remote['transactions']['refunds'][] = array( 'id' => 'REFnew', 'status' => $state );
+		$remote['transactions']['refunds'][] = array( 'id' => 'REFnew', 'amount' => '5.00', 'status' => $state );
 		$this->transport->response_override = Transport::response( $remote );
 		$row['provider_refs']['payment_id'] = 'PAY1';
 		$this->assertSame( array( 'status' => $expected, 'provider_ref' => 'REFnew' ), $this->adapter->refund( $row, 9, '5.00' ) );
 	}
 	public static function refund_states(): array { return array( array( 'processed', 'succeeded' ), array( 'pending', 'pending' ), array( 'in_process', 'pending' ), array( 'processing', 'pending' ), array( 'unknown', 'pending' ), array( 'failed', 'failed' ), array( 'rejected', 'failed' ), array( 'cancelled', 'failed' ), array( 'canceled', 'failed' ) ); }
+	/** @dataProvider refund_amounts */
+	public function test_refund_verifies_only_processed_amount( string $state, string $amount, string $expected ): void {
+		list( $order, $row ) = $this->create();
+		$remote = Transport::fixture( 'order-refunded' );
+		$remote['transactions']['refunds'][] = array( 'id' => 'REFnew', 'amount' => $amount, 'status' => $state );
+		$this->transport->response_override = Transport::response( $remote );
+		$old_logger = wc_get_logger();
+		$logger = $this->getMockBuilder( \WC_Logger::class )->setConstructorArgs( array( array(), 'debug' ) )->onlyMethods( array( 'error' ) )->getMock();
+		if ( 'processed' === $state && '24.0' !== $amount ) { // A processed refund with different money is pending AND logged.
+			$logger->expects( $this->once() )->method( 'error' )->with(
+				$this->callback( static function ( $message ) use ( $amount ) { return false !== strpos( $message, 'requested 24.00' ) && false !== strpos( $message, 'refunded ' . $amount ); } ),
+				$this->equalTo( array( 'source' => 'mercadopago-terminal' ) )
+			);
+		} else { $logger->expects( $this->never() )->method( 'error' ); }
+		$logging = static function () use ( &$logger ) { return $logger; };
+		add_filter( 'woocommerce_logging_class', $logging );
+		try {
+			$this->assertSame( array( 'status' => $expected, 'provider_ref' => 'REFnew' ), $this->adapter->refund( $row, 11, '24.00' ) );
+		} finally {
+			$logger = $old_logger; wc_get_logger(); remove_filter( 'woocommerce_logging_class', $logging );
+		}
+	}
+	public static function refund_amounts(): array {
+		return array(
+			array( 'processed', '24.0', 'succeeded' ), array( 'processed', '5.00', 'pending' ),
+			array( 'processing', '24.00', 'pending' ), array( 'processing', '5.00', 'pending' ),
+			array( 'pending', '24.00', 'pending' ), array( 'pending', '5.00', 'pending' ),
+		);
+	}
 	public function test_empty_action_falls_back_to_historical_transaction_reference(): void {
 		list( $order, $row ) = $this->create();
 		$row['provider_refs'] = array( 'action' => '', 'transaction_id' => 'ORD1' );
@@ -158,7 +187,7 @@ class Test_Provider_Adapter extends \WP_UnitTestCase {
 			$result = $this->adapter->verify_webhook( $this->transport->webhook_request( $event ) );
 			$this->assertSame( $row['id'], $result['payment_id'] );
 			$this->assertSame( $state, $result['patch']['status'] );
-			$this->assertSame( 'ORD1-' . $event, $result['patch']['event_id'] );
+			$this->assertSame( array( 'completed' => 'ORD1:processed:created', 'failed' => 'ORD1:failed:created', 'cancelled' => 'ORD1:canceled:created', 'pending' => 'ORD1:created:created' )[ $event ], $result['patch']['event_id'] );
 		}
 		$adopted = wcpos_pro_adopt_legacy_attempt( $order, Settings::GATEWAY_ID, 'ORD1', '24.00', 'EUR' );
 		$request = $this->transport->webhook_request( 'completed' );
@@ -167,7 +196,25 @@ class Test_Provider_Adapter extends \WP_UnitTestCase {
 		$this->assertSame( $adopted['id'], $result['payment_id'] );
 		$this->assertSame( 'captured', $result['patch']['status'] );
 		$this->assertSame( 'ORD1', $result['patch']['provider_refs']['transaction_id'] );
-		$this->assertSame( 'conformance-request', $result['patch']['event_id'] );
+		$this->assertSame( 'ORD1:processed:created', $result['patch']['event_id'] );
+	}
+	public function test_webhook_event_id_tracks_observation_not_notification(): void {
+		$this->create();
+		$request = $this->transport->webhook_request( 'completed' );
+		$first = $this->adapter->verify_webhook( $request );
+		$this->assertSame( $first['patch']['event_id'], $this->adapter->verify_webhook( $request )['patch']['event_id'] );
+		$body = $request->get_json_params(); $body['id'] = 'another-notification'; $request->set_body( wp_json_encode( $body ) );
+		$this->assertSame( $first['patch']['event_id'], $this->adapter->verify_webhook( $request )['patch']['event_id'] );
+		$this->transport->orders['ORD1']['data']['status'] = 'canceled';
+		$changed = $this->adapter->verify_webhook( $request );
+		$this->assertNotSame( $first['patch']['event_id'], $changed['patch']['event_id'] );
+		$this->assertSame( 'voided', $changed['patch']['status'] );
+		$this->transport->orders['ORD1']['data']['transactions']['payments'][0]['status'] = 'canceled';
+		$this->assertSame( 'ORD1:canceled:canceled', $this->adapter->verify_webhook( $request )['patch']['event_id'] );
+		unset( $this->transport->orders['ORD1']['data']['transactions']['payments'][0]['status'] );
+		$this->transport->orders['ORD1']['data']['status_detail'] = 'canceled_by_user';
+		$this->transport->response_override = Transport::response( $this->transport->orders['ORD1']['data'] );
+		$this->assertSame( 'ORD1:canceled:canceled_by_user', $this->adapter->verify_webhook( $request )['patch']['event_id'] );
 	}
 	public function test_cancel_cannot_cancel_order_is_terminal_only(): void {
 		$this->transport->response_override = Transport::response( array( 'errors' => array( array( 'code' => 'cannot_cancel_order' ) ) ), 409 );

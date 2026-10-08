@@ -21,7 +21,14 @@ class Gateway extends \WC_Payment_Gateway {
 		add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
 	}
 	public static function register_gateway( array $methods ): array { $methods[] = __CLASS__; return $methods; }
-	public function is_available() { return parent::is_available() && '' !== ( new Settings() )->access_token(); }
+	public function is_available() {
+		$settings = new Settings();
+		return '' !== $settings->access_token() && ( parent::is_available() || (
+			// A POS request, or the order-pay page for a user who may use the POS (Pro's panel gate);
+			// a customer paying an invoice must not see a terminal-only method.
+			$settings->enabled_for_pos() && ( ( function_exists( 'woocommerce_pos_request' ) && woocommerce_pos_request() ) || ( is_checkout_pay_page() && current_user_can( 'access_woocommerce_pos' ) ) )
+		) );
+	}
 	public function payment_fields() {
 		global $wp;
 		echo wpautop( wp_kses_post( $this->get_description() ) );

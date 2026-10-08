@@ -8,6 +8,56 @@ class Test_Gateway extends \WP_UnitTestCase {
 	private $transport;
 	public function setUp(): void { parent::setUp(); $this->transport = new Transport(); $this->transport->install(); }
 	public function tearDown(): void { $this->transport->uninstall(); parent::tearDown(); }
+	/** @dataProvider availability_cases */
+	public function test_pos_and_web_availability( string $context, bool $pos, bool $web, bool $token, bool $expected, string $role = 'pos' ): void {
+		global $wp;
+		// 'pos' = an administrator holding access_woocommerce_pos; 'customer' = a subscriber; '' = nobody logged in.
+		if ( 'pos' === $role ) {
+			$user = self::factory()->user->create( array( 'role' => 'administrator' ) );
+			get_user_by( 'id', $user )->add_cap( 'access_woocommerce_pos' );
+			wp_set_current_user( $user );
+		} else {
+			wp_set_current_user( '' === $role ? 0 : self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
+		}
+		$query_vars = $wp->query_vars;
+		$enable = static function ( $settings ) use ( $pos ) { $settings['gateways'][Settings::GATEWAY_ID]['enabled'] = $pos; return $settings; };
+		add_filter( 'woocommerce_pos_payment_gateways_settings', $enable );
+		add_filter( 'woocommerce_is_checkout', '__return_true' );
+		try {
+			$wp->query_vars = 'pos' === $context ? array( 'wcpos' => 1 ) : ( 'order-pay' === $context ? array( 'order-pay' => 123 ) : array() );
+			$options = get_option( 'woocommerce_' . Settings::GATEWAY_ID . '_settings' );
+			$options['enabled'] = $web ? 'yes' : 'no';
+			$options['access_token'] = $token ? 'TEST-conformance' : '';
+			update_option( 'woocommerce_' . Settings::GATEWAY_ID . '_settings', $options );
+			$this->assertSame( $expected, ( new Gateway() )->is_available() );
+		} finally {
+			$wp->query_vars = $query_vars;
+			remove_filter( 'woocommerce_is_checkout', '__return_true' );
+			remove_filter( 'woocommerce_pos_payment_gateways_settings', $enable );
+		}
+	}
+	public static function availability_cases(): array {
+		return array(
+			array( 'order-pay', true, false, true, true ),
+			// A customer paying an invoice, or nobody logged in, never sees a terminal-only method.
+			array( 'order-pay', true, false, true, false, 'customer' ),
+			array( 'order-pay', true, false, true, false, '' ),
+			array( 'pos', true, false, true, true ),
+			array( 'storefront', true, false, true, false ),
+			array( 'order-pay', false, false, true, false ),
+			array( 'pos', false, false, true, false ),
+			array( 'storefront', false, false, true, false ),
+			array( 'order-pay', false, true, true, true ),
+			array( 'pos', false, true, true, true ),
+			array( 'storefront', false, true, true, true ),
+			array( 'order-pay', true, false, false, false ),
+			array( 'pos', true, false, false, false ),
+			array( 'storefront', true, false, false, false ),
+			array( 'order-pay', true, true, false, false ),
+			array( 'pos', true, true, false, false ),
+			array( 'storefront', true, true, false, false ),
+		);
+	}
 	public function test_fields_availability_and_masked_secrets(): void {
 		$gateway = new Gateway();
 		$this->assertSame( array( 'enabled', 'title', 'description', 'mode', 'access_token', 'webhook_secret' ), array_keys( $gateway->form_fields ) );

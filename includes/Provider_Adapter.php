@@ -138,6 +138,12 @@ class Provider_Adapter extends Abstract_Provider_Adapter {
 		if ( is_wp_error( $result ) ) { return $result; }
 		$refunds = $result['transactions']['refunds'] ?? array();
 		$refund = end( $refunds );
+		if ( 'processed' === ( $refund['status'] ?? '' ) && ! Money::equals( $refund['amount'] ?? '0', $amount ) ) {
+			wc_get_logger()->error( sprintf( 'Mercado Pago refund amount mismatch: requested %s, refunded %s.', $amount, $refund['amount'] ?? 'missing' ), array( 'source' => 'mercadopago-terminal' ) );
+			// Mercado Pago moved money: keep the refund recorded as pending until someone reconciles it
+			// in the portal; `failed` would delete the WooCommerce refund and invite a second refund.
+			return array( 'status' => 'pending', 'provider_ref' => $refund['id'] ?? null );
+		}
 		// Per the reference, a new refund is processing. Unknown accepted states must stay pending:
 		// marking them failed deletes the Woo refund allocation and risks refunding the money twice.
 		return array( 'status' => array( 'processed' => 'succeeded', 'processing' => 'pending', 'pending' => 'pending', 'in_process' => 'pending', 'failed' => 'failed', 'rejected' => 'failed', 'cancelled' => 'failed', 'canceled' => 'failed' )[ $refund['status'] ?? '' ] ?? 'pending', 'provider_ref' => $refund['id'] ?? null );
@@ -162,7 +168,8 @@ class Provider_Adapter extends Abstract_Provider_Adapter {
 		$patch = $this->observation( $order );
 		$patch['status'] = array( 'completed' => ! empty( $patch['authorized'] ) ? 'authorized' : 'captured', 'failed' => 'failed', 'expired' => 'failed', 'cancelled' => 'voided', 'pending' => 'pending', 'in_progress' => 'pending' )[ $patch['status'] ];
 		unset( $patch['failure_reason'] );
-		$patch['event_id'] = (string) ( $body['id'] ?? $request_id );
+		// Shape: <MP order id>:<observed status>:<payment status or order status_detail>; Free compares equality only.
+		$patch['event_id'] = $order['id'] . ':' . ( $order['status'] ?? '' ) . ':' . ( $order['transactions']['payments'][0]['status'] ?? $order['status_detail'] ?? '' );
 		update_option( 'mptfwc_last_verified_webhook', time(), false );
 		return array( 'payment_id' => $id, 'patch' => $patch );
 	}
