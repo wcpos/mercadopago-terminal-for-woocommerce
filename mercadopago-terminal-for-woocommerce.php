@@ -58,4 +58,6 @@ function init(): void {
 		add_action( 'admin_post_mptfwc_set_pdv', array( Gateway::class, 'set_pdv' ) );
 	}
 }
-add_action( 'plugins_loaded', __NAMESPACE__ . '\\init', 11 );
+// Pro defines wcpos_pro_requires() and the provider registration API from its own
+// plugins_loaded hook at priority 20; the gate must run after that.
+add_action( 'plugins_loaded', __NAMESPACE__ . '\\init', 30 );
