@@ -48,7 +48,9 @@ class Provider_Adapter extends Abstract_Provider_Adapter {
 		// same row later. Remember that a create was sent before the call, so a "terminal busy" on
 		// the replay is treated as ambiguous (keep polling) rather than as a final refusal that
 		// would mark a payment failed while the customer pays it. An hour outlives any PT5M order.
-		$replayed = (bool) get_transient( 'mptfwc_sent_' . $row['id'] );
+		// Free appends "Provider did not answer" to the stored row's events on an unanswered intent,
+		// so a non-empty event log is the durable signal; the transient covers the same request.
+		$replayed = ! empty( $row['events'] ) || (bool) get_transient( 'mptfwc_sent_' . $row['id'] );
 		set_transient( 'mptfwc_sent_' . $row['id'], 1, HOUR_IN_SECONDS );
 		// Per the reference, external_reference permits letters, digits, hyphen and underscore, not colon.
 		$result = $this->call( 'create_order', array( array(

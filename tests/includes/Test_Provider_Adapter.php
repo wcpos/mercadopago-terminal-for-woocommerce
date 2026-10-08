@@ -203,6 +203,11 @@ class Test_Provider_Adapter extends \WP_UnitTestCase {
 		$replay = $this->adapter->create_reader_action( $row, 'reader-1' );
 		$this->assertSame( 'mercadopago_terminal_busy', $replay->get_error_code() );
 		$this->assertTrue( $replay->get_error_data()['indeterminate'], 'A replay must keep the row pending so the webhook or sweeper can settle the order on the terminal' );
+		// The stored row's events are the durable signal when the transient is gone (object cache flushed).
+		delete_transient( 'mptfwc_sent_' . $row['id'] );
+		$row['events'] = array( array( 't' => gmdate( 'c' ), 'level' => 'warning', 'message' => 'Provider did not answer' ) );
+		$durable = $this->adapter->create_reader_action( $row, 'reader-1' );
+		$this->assertTrue( $durable->get_error_data()['indeterminate'], 'The row\'s own events must mark it as sent before' );
 		// A different row's first attempt is still a final refusal.
 		list( $order2, $row2 ) = $this->fresh_row();
 		$final = $this->adapter->create_reader_action( $row2, 'reader-1' );
