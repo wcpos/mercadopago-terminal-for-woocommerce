@@ -1,92 +1,66 @@
-# Mercado Pago Terminal for WooCommerce
+# Mercado Pago Terminal for WooCommerce 1.0.0
 
-Take card payments on a Mercado Pago **Point Smart** (1 or 2) terminal from WooCommerce and WooCommerce POS. The till sends the order total to the terminal, the customer pays there, and the order records the payment.
+Mercado Pago Point payments on **WooCommerce POS Pro 2.0 or newer**. Requires WooCommerce, WordPress 6.0+, and PHP 7.4+. Pro includes Free; do not install the standalone Free plugin as a dependency.
 
-The plugin uses Mercado Pago's current **Orders API** for Point (`POST /v1/orders` with `type: "point"`), not the older Payment Intents API. Mercado Pago is the source of truth for every payment; WooCommerce order meta is only a cache.
-
-> **Status: unreleased, untested on hardware.** Everything below is built from Mercado Pago's public developer documentation (read 2026-10-05) and covered by unit tests against the documented payloads. Nothing has run against a Mercado Pago account or a physical terminal yet. See [What is untested](#what-is-untested).
-
-## Requirements
-
-- WordPress 5.2+, WooCommerce, PHP 7.4+.
-- A Mercado Pago **seller account** in a country where Point runs on the Orders API: Argentina, Brazil, Mexico, Uruguay, Colombia, Chile or Peru.
-- An application under Mercado Pago → **Your integrations**, with its access token (`APP_USR-…`).
-- A Point Smart terminal in **PDV** (integrated) mode. Terminals ship in STANDALONE mode.
+This is the `next` / 2.0 integration. The `main` / 0.x line is separate. This release has automated, transport-faked verification, **not live Mercado Pago or hardware certification**.
 
 ## Setup
 
-1. Install and activate WooCommerce and this plugin.
-2. Go to **WooCommerce → Settings → Payments → Mercado Pago Terminal**.
-3. Choose **Mode**: *Test* for test credentials (they drive Mercado Pago's virtual terminal), *Live* for production credentials.
-4. Paste the application's **Access token**.
-5. In Mercado Pago, open **Your integrations → your application → Webhooks**. Add the webhook URL shown under *Webhook secret* (`…/wp-admin/admin-ajax.php?action=mptfwc_webhook`), select the **Order (Mercado Pago)** event, save, and paste the **secret signature** back into *Webhook secret*. Without the secret, notifications are still processed but their signatures are not verified; the diagnostics panel says so.
-6. Save, then reload the page: the **Default terminal** dropdown and the **Terminals** table now list the account's terminals.
-7. A terminal shown in STANDALONE mode cannot receive orders. Click **Switch to PDV**, then **restart the terminal** (Mercado Pago requires the restart).
-8. Optionally restrict **Enabled terminals**, and turn on **Lock terminal selection** so cashiers always use the default terminal.
-9. In WooCommerce POS, enable the gateway under **POS → Settings → Checkout**. The WooCommerce → Payments switch only affects the online store.
+1. Activate WooCommerce, WooCommerce POS Pro 2.0+, and this extension. Without compatible Pro, the extension shows a notice and registers no gateway or provider.
+2. Open **WooCommerce → Settings → Payments → Mercado Pago Terminal**. Enter the access token and select the matching test/live label. The token itself determines the Mercado Pago environment; changing the label does not change credentials. Finish outstanding payments before replacing a token.
+3. In your Mercado Pago integration, subscribe to Order notifications using the URL shown beside **Webhook secret**:
+   `https://your-store.example/wp-json/wcpos/v2/payments/webhook?provider=mercadopago`
+   Paste the corresponding signature secret. **Empty secrets and invalid signatures are rejected with HTTP 401.** Polling and Pro's reconciliation do not depend on webhook delivery.
+4. Use the gateway's credential check and terminals table. For a STANDALONE terminal, select **Switch to PDV**, then restart the terminal. Only PDV terminals are available for payment.
+5. Enable the gateway in **POS settings** and configure Pro's reader selection, default reader, and allowed readers. Old extension-specific terminal settings no longer control selection.
 
-## Checkout flow
+## Taking payments
 
-1. The cashier picks the terminal (or it is locked to the default) and clicks **Start Terminal Payment**.
-2. The plugin creates a Mercado Pago order for the order total on that terminal. The order expires on Mercado Pago's side after 5 minutes (filter `mptfwc_order_expiration_time`, ISO 8601 duration, `PT30S`–`PT3H`).
-3. The panel polls every 2 seconds (`mptfwc_poll_interval_ms`). It shows *Customer is paying on the terminal…* while the order is `at_terminal`, and *Confirm the payment on the terminal* for `action_required`.
-4. When Mercado Pago reports the order `processed`, the order is completed (transaction id = the Mercado Pago `ORD…` id) and the POS goes to its receipt page.
-5. The webhook does the same independently, so a closed browser does not lose a payment.
+The app's terminal flow and the eligible order-pay page use the same provider adapter. The order-pay panel belongs to Pro and appears for the POS webview or an authenticated POS user with the required order permissions. It is not a storefront-customer terminal UI. Leave the web-checkout enable switch off for POS-only use: as specified, gateway availability checks only WooCommerce availability and token presence, so enabling it can expose a method to storefront customers who cannot use the panel.
 
-### Cancelling
+Pro/Free own the ledger, payment UUID, reader curation, polling, locking, reconciliation, settlement, and redirects. Create requests use the payment UUID as their idempotency key and `wcpos_<UUID>` as their external reference. No automatic transport retries are made by this extension.
 
-Mercado Pago only lets the API cancel an order **before the terminal picks it up** (status `created`). After that the cashier sees *The payment is already on the terminal. Cancel it on the terminal, or wait for it to expire.* The panel keeps polling, so a payment the customer completes anyway still finishes the order.
+Point auto-captures; cashier prompts and manual capture are unsupported. API cancellation is requested, not presumed complete. If the terminal already picked up the order, cancel on the terminal or wait for provider expiry. The default expiry is five minutes (`mptfwc_order_expiration_time`).
 
-### Refunds
+The adapter reports the order's currency when supplied by Mercado Pago, falling back to the store currency when absent. **Configure the store and seller account to use the same currency**; a provider currency mismatch fails settlement.
 
-Refunds go through the normal WooCommerce refund screen (*Refund via Mercado Pago Terminal*). A refund of the whole order is sent as a full refund; anything else as a partial refund against the payment. Mercado Pago allows refunds up to 90 days after payment. If Mercado Pago refuses an API refund, the error says so: some card acquirers only allow refunds on the terminal. In that case refund on the Point terminal and record the refund in WooCommerce manually.
+## Refunds
 
-## Safety model
+Use WooCommerce's **Refund via Mercado Pago Terminal** action. Pro binds the operation to that WooCommerce refund and records the provider result. Full refunds send no payload; partial refunds use the MP payment reference, fetching it from the MP order when needed. Historical 0.x sales remain refundable by their WooCommerce transaction ID (`ORD…`). The transaction ID remains the MP **order** ID; `PAY…` is a separate payment reference.
 
-- **No double charge on retry.** The idempotency key and `external_reference` for a payment are saved on the order before the create request is sent. A retry after a timeout or transport error reuses them, so Mercado Pago returns the same order instead of making a second one. A definitive 4xx rejection discards them, because no order exists.
-- **Bound to the order.** A Mercado Pago order completes a WooCommerce order only if its `external_reference` names that order, it was created by this shop for that order (attempt history), its type is `point`, its amount equals the order total, and its terminal matches the attempt.
-- **Exactly once.** Completion runs under a per-order lock in `wp_options` and is idempotent on the transaction id. A second payment for an already-paid order is recorded as a conflict note, not completed again.
-- **Webhooks are verified and never trusted.** The `x-signature` HMAC-SHA256 is checked with the webhook secret before anything else. Only `data.id` is read from the body; the order is always fetched from the API with the shop's token.
-- **Checkout endpoints** need a per-order token or an order capability; switching a terminal to PDV needs `manage_woocommerce` and a nonce.
-- Access tokens, webhook signatures and card numbers are redacted from all logs.
+Provider refusals remain errors; do not assume a pending refund has succeeded. Check Mercado Pago before retrying an ambiguous refund or recording money returned another way.
+
+## Upgrading from 0.x
+
+A one-time upgrade adopts non-final legacy attempts into Pro's ledger without creating a second provider order. Old `_mptfwc_*` metadata remains inert. Adoption requires a known MP order ID; a legacy indeterminate create with no returned MP ID cannot be adopted by this routine. Adoption processes up to 25 orders per `init`, saving its offset until a short page completes the upgrade. Failed orders are logged (order ID and error code) and skipped, not automatically retried; review these failures for manual reconciliation. The old reconciliation cron is cleared. Pro now owns the payment panel, reader settings, support bundle, and reconciliation.
+
+### Behavior changes / regressions
+
+- Pro 2.0 is mandatory; standalone 0.x operation is removed.
+- Unsigned notifications are no longer processed. Replace the old AJAX webhook URL with the Pro REST URL above.
+- Extension reader controls, browser logs, log-level settings, payment AJAX endpoints, and support-bundle endpoint are removed. Use Pro and WooCommerce's equivalents.
+- The old `mptfwc_order_payload` customization filter is removed; `mptfwc_order_expiration_time` remains.
+- `refunded` is a completed-payment observation, not an instruction to create another WooCommerce refund. External terminal-side refunds require merchant reconciliation.
 
 ## Reporting a problem
 
-**Something not working? Go to WooCommerce → Settings → Payments → Mercado Pago Terminal, click _Download support bundle_, and attach the file to your support request.** It contains your environment, settings (secrets masked), terminals, recent payment attempts and the plugin's recent log. Nothing in it can be used to take payments.
+Open this gateway's WooCommerce settings page and use the **Support bundle** row added by Pro. Attach that bundle to your report, along with the order and approximate payment time. Review the bundle before sharing it.
 
-Logging is at **Debug** by default while the plugin is in beta (setting *Log level*). It records every Mercado Pago request and response, every webhook and every payment state change, with timings and a request id on each line. You can read it yourself under WooCommerce → Status → Logs, source `mercadopago-terminal`.
+API requests and responses are logged once at debug level using WooCommerce logging, source **`mercadopago-terminal`**, with Pro redaction and without the request Authorization header. Ledger events use Pro's logging. Configure log retention and verbosity in WooCommerce, not this extension.
 
 ## What is untested
 
-Mercado Pago provides a sandbox that should cover most of the flow without hardware: test credentials, a virtual terminal (serial `SBX0000001`, e.g. `NEWLAND_N950__SBX0000001`) and `POST /v1/orders/{id}/events` to simulate `processed`, `failed`, `canceled`, `expired`, `refunded` and `action_required`, with real webhooks. It needs a Mercado Pago account, which we do not have yet, so **none of the following has been run**:
-
-- Any call against the real API: field names in responses, error shapes, and the idempotency behaviour (format and retention window not documented).
-- The webhook signature manifest (`id:<data.id>;request-id:<x-request-id>;ts:<ts>;`). It is Mercado Pago's documented standard, but its use for Point order notifications is not confirmed.
-- Whether the virtual terminal appears in the terminal list and accepts the PDV switch. The plugin allows an unlisted terminal, so the sandbox device should still work.
-
-These need a physical Point Smart terminal:
-
-- Real card flows (chip, contactless, PIN), declines, `action_required` on a real device.
-- Terminal-side cancel (`canceled_on_terminal`) and the behaviour once an order is `at_terminal`.
-- The PDV ↔ STANDALONE switch and restart, and what a STANDALONE terminal does with an order.
-- Receipt printing (`print_on_terminal` is `no_ticket`; filter `mptfwc_order_payload` to change it), installments, QR on the terminal.
-- Which acquirers force terminal-side refunds.
-- Mercado Pago's integration-quality measurement, which needs a real production payment.
+No seller sandbox account or physical Point terminal was exercised for this release. Real API error/response shapes, idempotency retention, Point webhook signatures, regional currency behavior, real declines, terminal-side cancellation, PDV switching/restart, receipt behavior, and live refunds remain unverified. Automated tests are not payment-provider certification. Credential replacement during an existing payment is not covered by the mode-label isolation scenario.
 
 ## Development
 
+The WordPress tests require a composer-installed Pro `next` checkout at `../woocommerce-pos-pro`, with Free vendored by Pro. `.wp-env.json` mounts WooCommerce, Pro, and this extension. From a running environment, derive the mounted extension directory from the checkout name with `$(basename "$PWD")` (as the package scripts do). The default checkout name is `mercadopago-terminal-for-woocommerce`:
+
 ```sh
-composer install
-composer lint
-composer test       # PHPUnit, WordPress and WooCommerce stubbed
-composer test:js    # checkout panel (Node 22+)
+npx wp-env run --env-cwd="wp-content/plugins/$(basename "$PWD")" tests-cli -- vendor/bin/phpunit -c phpunit.xml.dist --filter 'Tests\\Conformance\\'
+npx wp-env run --env-cwd="wp-content/plugins/$(basename "$PWD")" tests-cli -- vendor/bin/phpunit -c phpunit.xml.dist --filter 'Tests\\Includes\\'
 ```
 
-## References
+Always select with `--filter`, not a directory argument. To record **missing** goldens once, insert `env WCPOS_RECORD_TRANSCRIPTS=1` before `vendor/bin/phpunit`. Review the JSON in `tests/includes/Conformance/transcripts`, rerun without recording, then commit it. CI never records.
 
-- Point overview: https://www.mercadopago.com.mx/developers/en/docs/mp-point/overview
-- Payment processing: https://www.mercadopago.com.mx/developers/en/docs/mp-point/payment-processing
-- Integration test (virtual terminal, simulated statuses): https://www.mercadopago.com.mx/developers/en/docs/mp-point/integration-test
-- Notifications: https://www.mercadopago.com.mx/developers/en/docs/mp-point/notifications
-- Terminal operating mode: https://www.mercadopago.com.mx/developers/en/docs/mp-point/configure-terminal
-- Order and transaction statuses: https://www.mercadopago.com.mx/developers/en/docs/mp-point/resources/status-order-transaction
+The fixture uses the real gateway, adapter, HTTP client, Pro handlers, and Free ledger. Only Mercado Pago HTTP is faked. Transcript `webhook` means the authoritative GET triggered by a signed notification; `fetch` means an ordinary poll/refund lookup. Currency mismatch changes the store currency after the create request to exercise the fallback for responses that omit currency; unit tests also cover explicit provider currency mismatches. The adoption scenario models an old provider action by removing its new-style external reference. Prompts, manual capture, and final cancellation are explicitly skipped.
