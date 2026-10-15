@@ -2,7 +2,18 @@
 
 All notable changes to Mercado Pago Terminal for WooCommerce will be documented in this file.
 
-## 0.1.0 - Unreleased
+## 0.1.1 - 2026-10-15
+
+First version run against a live Mercado Pago account and a physical Point Smart (Chilean pesos): terminal listing, the PDV switch, order creation, polling and cancellation via the API all worked.
+
+### Fixed
+
+- The log's environment line and the support bundle now report the WooCommerce POS version. They looked for a global `WCPOS_VERSION` constant that the POS plugin never defines, so they always said `n/a`.
+- API error messages now include Mercado Pago's `details`, so a rejected order says which field was refused (for example "Invalid value for property ('$.transactions.payments[0].amount' - does not match pattern)").
+- Stores that price in whole units (WooCommerce price decimals set to 0, as with Chilean pesos) now send whole-unit amounts such as `100` to Mercado Pago, which refused `100.00` with "does not match pattern". Two-decimal stores still send `24.00`. A fractional amount in a whole-unit store is never rounded; it is sent as is and refused by Mercado Pago rather than charged at a different figure. A pending attempt saved in the old format keeps its idempotency key on retry.
+- A Mercado Pago order whose `currency` differs from the WooCommerce order's currency no longer completes the order. Mercado Pago charges in the account's currency, so a shop priced in another currency could otherwise have completed on a matching number of the wrong units.
+
+## 0.1.0 - 2026-10-05
 
 ### Added
 
@@ -19,9 +30,3 @@ All notable changes to Mercado Pago Terminal for WooCommerce will be documented 
 - Debug logging (default while in beta) of every API call, webhook and state change, with tokens, signatures and card numbers redacted.
 - A Download support bundle button and a live API check on the settings page.
 
-### Fixed
-
-- The log's environment line and the support bundle now report the WooCommerce POS version. They looked for a global `WCPOS_VERSION` constant that the POS plugin never defines, so they always said `n/a`.
-- API error messages now include Mercado Pago's `details`, so a rejected order says which field was refused (for example "Invalid value for property ('$.transactions.payments[0].amount' - does not match pattern)").
-- Stores that price in whole units (WooCommerce price decimals set to 0, as with Chilean pesos) now send whole-unit amounts such as `100` to Mercado Pago, which refused `100.00` with "does not match pattern". Two-decimal stores still send `24.00`. A fractional amount in a whole-unit store is never rounded; it is sent as is and refused by Mercado Pago rather than charged at a different figure. A pending attempt saved in the old format keeps its idempotency key on retry.
-- A Mercado Pago order whose `currency` differs from the WooCommerce order's currency no longer completes the order. Mercado Pago charges in the account's currency, so a shop priced in another currency could otherwise have completed on a matching number of the wrong units.

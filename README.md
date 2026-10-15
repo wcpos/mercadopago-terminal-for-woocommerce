@@ -4,7 +4,7 @@ Take card payments on a Mercado Pago **Point Smart** (1 or 2) terminal from WooC
 
 The plugin uses Mercado Pago's current **Orders API** for Point (`POST /v1/orders` with `type: "point"`), not the older Payment Intents API. Mercado Pago is the source of truth for every payment; WooCommerce order meta is only a cache.
 
-> **Status: unreleased, untested on hardware.** Everything below is built from Mercado Pago's public developer documentation (read 2026-10-05) and covered by unit tests against the documented payloads. Nothing has run against a Mercado Pago account or a physical terminal yet. See [What is untested](#what-is-untested).
+> **Status: beta, partly verified live.** Built from Mercado Pago's public developer documentation and covered by unit tests against the documented payloads. On 2026-10-15 terminal listing, the PDV switch, order creation, polling and API cancellation ran against a live account and a physical Point Smart in Chile. Card payments, the webhook on a paid order and refunds have not been exercised yet. See [What has been verified live, and what has not](#what-has-been-verified-live-and-what-has-not).
 
 ## Requirements
 
@@ -19,11 +19,12 @@ The plugin uses Mercado Pago's current **Orders API** for Point (`POST /v1/order
 2. Go to **WooCommerce → Settings → Payments → Mercado Pago Terminal**.
 3. Choose **Mode**: *Test* for test credentials (they drive Mercado Pago's virtual terminal), *Live* for production credentials.
 4. Paste the application's **Access token**.
-5. In Mercado Pago, open **Your integrations → your application → Webhooks**. Add the webhook URL shown under *Webhook secret* (`…/wp-admin/admin-ajax.php?action=mptfwc_webhook`), select the **Order (Mercado Pago)** event, save, and paste the **secret signature** back into *Webhook secret*. Without the secret, notifications are still processed but their signatures are not verified; the diagnostics panel says so.
-6. Save, then reload the page: the **Default terminal** dropdown and the **Terminals** table now list the account's terminals.
-7. A terminal shown in STANDALONE mode cannot receive orders. Click **Switch to PDV**, then **restart the terminal** (Mercado Pago requires the restart).
-8. Optionally restrict **Enabled terminals**, and turn on **Lock terminal selection** so cashiers always use the default terminal.
-9. In WooCommerce POS, enable the gateway under **POS → Settings → Checkout**. The WooCommerce → Payments switch only affects the online store.
+5. If your shop's currency has no minor unit (for example Chilean pesos), set **WooCommerce → Settings → General → Number of decimals** to **0**. Mercado Pago refuses amounts with decimals on such accounts, and the plugin sends whole-unit amounts only when this setting is 0.
+6. In Mercado Pago, open **Your integrations → your application → Webhooks**. Add the webhook URL shown under *Webhook secret* (`…/wp-admin/admin-ajax.php?action=mptfwc_webhook`), select the **Order (Mercado Pago)** event, save, and paste the **secret signature** back into *Webhook secret*. Without the secret, notifications are still processed but their signatures are not verified; the diagnostics panel says so.
+7. Save, then reload the page: the **Default terminal** dropdown and the **Terminals** table now list the account's terminals.
+8. A terminal shown in STANDALONE mode cannot receive orders. Click **Switch to PDV**, then **restart the terminal** (Mercado Pago requires the restart).
+9. Optionally restrict **Enabled terminals**, and turn on **Lock terminal selection** so cashiers always use the default terminal.
+10. In WooCommerce POS, enable the gateway under **POS → Settings → Checkout**. The WooCommerce → Payments switch only affects the online store.
 
 ## Checkout flow
 
@@ -56,22 +57,25 @@ Refunds go through the normal WooCommerce refund screen (*Refund via Mercado Pag
 
 Logging is at **Debug** by default while the plugin is in beta (setting *Log level*). It records every Mercado Pago request and response, every webhook and every payment state change, with timings and a request id on each line. You can read it yourself under WooCommerce → Status → Logs, source `mercadopago-terminal`.
 
-## What is untested
+## What has been verified live, and what has not
 
-Mercado Pago provides a sandbox that should cover most of the flow without hardware: test credentials, a virtual terminal (serial `SBX0000001`, e.g. `NEWLAND_N950__SBX0000001`) and `POST /v1/orders/{id}/events` to simulate `processed`, `failed`, `canceled`, `expired`, `refunded` and `action_required`, with real webhooks. It needs a Mercado Pago account, which we do not have yet, so **none of the following has been run**:
+On 2026-10-15 the plugin ran against a live Mercado Pago account (Chile, Chilean pesos) with a physical Point Smart: listing terminals, switching the terminal to PDV mode, creating an order for the terminal, polling it, and cancelling it through the API all worked, and the field names in those responses matched the code. That run also found that such an account refuses two-decimal amounts; 0.1.1 sends whole units when WooCommerce's "Number of decimals" is 0 (see Setup).
 
-- Any call against the real API: field names in responses, error shapes, and the idempotency behaviour (format and retention window not documented).
-- The webhook signature manifest (`id:<data.id>;request-id:<x-request-id>;ts:<ts>;`). It is Mercado Pago's documented standard, but its use for Point order notifications is not confirmed.
-- Whether the virtual terminal appears in the terminal list and accepts the PDV switch. The plugin allows an unlisted terminal, so the sandbox device should still work.
+Not yet exercised anywhere:
 
-These need a physical Point Smart terminal:
+- A paid order end to end: the webhook on `order.processed`, its signature manifest (`id:<data.id>;request-id:<x-request-id>;ts:<ts>;`), and completion of the WooCommerce order from a real payment.
+- Whether an order sent to the terminal appears on its screen (`at_terminal`).
+- Mercado Pago's sandbox. If its virtual terminal is not listed by the account, it cannot be chosen or switched to PDV from the settings page.
+
+These need a card on a physical Point Smart terminal:
 
 - Real card flows (chip, contactless, PIN), declines, `action_required` on a real device.
 - Terminal-side cancel (`canceled_on_terminal`) and the behaviour once an order is `at_terminal`.
-- The PDV ↔ STANDALONE switch and restart, and what a STANDALONE terminal does with an order.
-- Receipt printing (`print_on_terminal` is `no_ticket`; filter `mptfwc_order_payload` to change it), installments, QR on the terminal.
-- Which acquirers force terminal-side refunds.
+- Receipt printing, installments, QR on the terminal.
+- Refunds, and which acquirers force terminal-side refunds.
 - Mercado Pago's integration-quality measurement, which needs a real production payment.
+
+For developers: Mercado Pago's sandbox offers test credentials, a virtual terminal (serial `SBX0000001`, e.g. `NEWLAND_N950__SBX0000001`) and `POST /v1/orders/{id}/events` to simulate `processed`, `failed`, `canceled`, `expired`, `refunded` and `action_required`, with real webhooks. Receipt printing is off (`print_on_terminal` is `no_ticket`); the `mptfwc_order_payload` filter changes the order payload.
 
 ## Development
 
