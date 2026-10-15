@@ -1,6 +1,5 @@
 <?php
 use PHPUnit\Framework\TestCase;
-use WCPOS\WooCommercePOS\MercadoPagoTerminal\Logger;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\PaymentAttempt;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\Settings;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\SupportBundle;
@@ -59,6 +58,9 @@ class SupportBundleTest extends TestCase {
 			'enabled_terminals' => array( 'T1', 'T2' ),
 			'enabled' => 'yes',
 		);
+		if ( ! defined( 'WCPOS\WooCommercePOS\VERSION' ) ) {
+			define( 'WCPOS\WooCommercePOS\VERSION', '1.11.1' );
+		}
 		$bundle = ( new SupportBundle( null, static function () { return array(); } ) )->build();
 		foreach ( array( 'Environment', 'Settings', 'Terminals', 'Recent payment attempts', 'Recent log (source mercadopago-terminal)' ) as $title ) {
 			$this->assertStringContainsString( "\n== " . $title . " ==\n", $bundle );
@@ -76,7 +78,7 @@ class SupportBundleTest extends TestCase {
 		foreach ( array( 'Generated at:', 'Plugin:', 'WordPress:', 'WooCommerce:', 'PHP:', 'WCPOS:', 'Site URL: https://shop.test', 'Timezone: UTC', 'HPOS enabled:', 'json: yes', 'curl:', 'openssl:', 'mbstring:', 'WP_DEBUG:', 'Memory limit:', 'WooCommerce log handler:' ) as $field ) {
 			$this->assertStringContainsString( $field, $bundle );
 		}
-		$this->assertStringContainsString( 'WCPOS: ' . Logger::wcpos_version( 'unknown' ) . "\n", $bundle );
+		$this->assertStringContainsString( 'WCPOS: ' . constant( 'WCPOS\WooCommercePOS\VERSION' ) . "\n", $bundle );
 		$this->assertStringContainsString( '(no log lines found)', $bundle );
 	}
 
