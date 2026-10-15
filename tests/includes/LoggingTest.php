@@ -66,12 +66,23 @@ class LoggingTest extends TestCase {
 		$id = Logger::request_id();
 		$this->assertMatchesRegularExpression( '/^[0-9a-f]{8}$/', $id );
 		$this->assertCount( 3, WP_Stub::$logs );
-		$this->assertSame( '[' . $id . '] ' . sprintf( 'Environment: plugin %s, WooCommerce %s, WordPress %s, PHP %s, WCPOS %s, log level debug', MPTFWC_VERSION, defined( 'WC_VERSION' ) ? WC_VERSION : 'n/a', $GLOBALS['wp_version'] ?? 'n/a', PHP_VERSION, defined( 'WCPOS_VERSION' ) ? WCPOS_VERSION : 'n/a' ), WP_Stub::$logs[0]['message'] );
+		$this->assertSame( '[' . $id . '] ' . sprintf( 'Environment: plugin %s, WooCommerce %s, WordPress %s, PHP %s, WCPOS %s, log level debug', MPTFWC_VERSION, defined( 'WC_VERSION' ) ? WC_VERSION : 'n/a', $GLOBALS['wp_version'] ?? 'n/a', PHP_VERSION, Logger::wcpos_version( 'n/a' ) ), WP_Stub::$logs[0]['message'] );
 		foreach ( WP_Stub::$logs as $entry ) { $this->assertStringStartsWith( '[' . $id . '] ', $entry['message'] ); }
 		Logger::reset_request();
 		Logger::log( 'Next request' );
 		$this->assertStringContainsString( '] Environment:', WP_Stub::$logs[3]['message'] );
 		$this->assertStringStartsWith( '[' . Logger::request_id() . '] ', WP_Stub::$logs[4]['message'] );
+	}
+
+	public function test_wcpos_version_reads_the_namespaced_pos_constant(): void {
+		if ( ! defined( 'WCPOS\WooCommercePOS\VERSION' ) ) {
+			$this->assertSame( 'n/a', Logger::wcpos_version( 'n/a' ) );
+			define( 'WCPOS\WooCommercePOS\VERSION', '1.11.1' );
+		}
+		$this->assertSame( constant( 'WCPOS\WooCommercePOS\VERSION' ), Logger::wcpos_version( 'n/a' ) );
+		Logger::reset_request();
+		Logger::log( 'Probe' );
+		$this->assertStringContainsString( 'WCPOS ' . constant( 'WCPOS\WooCommercePOS\VERSION' ) . ',', WP_Stub::$logs[0]['message'] );
 	}
 
 	/** @dataProvider redactions */

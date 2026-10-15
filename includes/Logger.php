@@ -61,6 +61,16 @@ class Logger {
 	 * @param array  $context Extra context appended to the message, redacted.
 	 * @param string $level   PSR-3 level; the internal "success" maps to "info".
 	 */
+	/**
+	 * WooCommerce POS version, or $fallback when the POS plugin is inactive.
+	 *
+	 * WooCommerce POS defines its version as the namespaced constant
+	 * WCPOS\WooCommercePOS\VERSION, not a global WCPOS_VERSION.
+	 */
+	public static function wcpos_version( string $fallback ): string {
+		return defined( 'WCPOS\WooCommercePOS\VERSION' ) ? (string) constant( 'WCPOS\WooCommercePOS\VERSION' ) : $fallback;
+	}
+
 	public static function log( $message, array $context = array(), string $level = '' ): void {
 		try {
 			if ( '' === $level ) {
@@ -70,7 +80,7 @@ class Logger {
 			if ( function_exists( 'apply_filters' ) && ! apply_filters( 'mptfwc_logging', true, $message ) ) { return; }
 			if ( ! self::$environment_logged && 'debug' === self::$active_level ) {
 				self::$environment_logged = true;
-				self::log( sprintf( 'Environment: plugin %s, WooCommerce %s, WordPress %s, PHP %s, WCPOS %s, log level %s', MPTFWC_VERSION, defined( 'WC_VERSION' ) ? WC_VERSION : 'n/a', $GLOBALS['wp_version'] ?? 'n/a', PHP_VERSION, defined( 'WCPOS_VERSION' ) ? WCPOS_VERSION : 'n/a', self::$active_level ), array(), 'info' );
+				self::log( sprintf( 'Environment: plugin %s, WooCommerce %s, WordPress %s, PHP %s, WCPOS %s, log level %s', MPTFWC_VERSION, defined( 'WC_VERSION' ) ? WC_VERSION : 'n/a', $GLOBALS['wp_version'] ?? 'n/a', PHP_VERSION, self::wcpos_version( 'n/a' ), self::$active_level ), array(), 'info' );
 			}
 			if ( ! is_string( $message ) ) {
 				$message = print_r( $message, true ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r

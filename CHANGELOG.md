@@ -18,3 +18,7 @@ All notable changes to Mercado Pago Terminal for WooCommerce will be documented 
 - Full and partial refunds from WooCommerce, with a clear message when Mercado Pago requires a refund on the terminal.
 - Debug logging (default while in beta) of every API call, webhook and state change, with tokens, signatures and card numbers redacted.
 - A Download support bundle button and a live API check on the settings page.
+
+### Fixed
+
+- The log's environment line and the support bundle now report the WooCommerce POS version. They looked for a global `WCPOS_VERSION` constant that the POS plugin never defines, so they always said `n/a`.
