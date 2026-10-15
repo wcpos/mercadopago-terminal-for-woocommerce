@@ -44,6 +44,18 @@ class PaymentAttemptTest extends TestCase {
 		$this->assertSame( 1, $this->order->save_calls );
 	}
 
+	/** A pending record saved as "100.00" before the format change keeps its key when the retry computes "100". */
+	public function test_prepare_reuses_pending_request_whose_amount_only_changed_format(): void {
+		$pending = PaymentAttempt::prepare( $this->order, 'terminal-1', '100.00' );
+		$reused  = PaymentAttempt::prepare( $this->order, 'terminal-1', '100' );
+		$this->assertSame( $pending['idempotency_key'], $reused['idempotency_key'] );
+		$this->assertSame( $pending['external_reference'], $reused['external_reference'] );
+		$this->assertSame( '100', $reused['amount'] );
+		$this->assertSame( '100', $this->order->get_meta( PaymentAttempt::META_PENDING_CREATE )['amount'] );
+		$this->assertCount( 1, PaymentAttempt::history( $this->order ) );
+		$this->assertNotSame( $pending['idempotency_key'], PaymentAttempt::prepare( $this->order, 'terminal-1', '101' )['idempotency_key'] );
+	}
+
 	public function test_discard_pending_marks_history_rejected_and_next_prepare_gets_new_key(): void {
 		PaymentAttempt::prepare( $this->order, 'terminal-older', '24.00' );
 		$pending = PaymentAttempt::prepare( $this->order, 'terminal-1', '24.00' );
