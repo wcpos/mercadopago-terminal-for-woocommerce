@@ -44,7 +44,7 @@ Refunds go through the normal WooCommerce refund screen (*Refund via Mercado Pag
 ## Safety model
 
 - **No double charge on retry.** The idempotency key and `external_reference` for a payment are saved on the order before the create request is sent. A retry after a timeout or transport error reuses them, so Mercado Pago returns the same order instead of making a second one. A definitive 4xx rejection discards them, because no order exists.
-- **Bound to the order.** A Mercado Pago order completes a WooCommerce order only if its `external_reference` names that order, it was created by this shop for that order (attempt history), its type is `point`, its amount equals the order total, and its terminal matches the attempt.
+- **Bound to the order.** A Mercado Pago order completes a WooCommerce order only if its `external_reference` names that order, it was created by this shop for that order (attempt history), its type is `point`, its amount equals the order total, its currency (when Mercado Pago reports one) equals the order's currency, and its terminal matches the attempt.
 - **Exactly once.** Completion runs under a per-order lock in `wp_options` and is idempotent on the transaction id. A second payment for an already-paid order is recorded as a conflict note, not completed again.
 - **Webhooks are verified and never trusted.** The `x-signature` HMAC-SHA256 is checked with the webhook secret before anything else. Only `data.id` is read from the body; the order is always fetched from the API with the shop's token.
 - **Checkout endpoints** need a per-order token or an order capability; switching a terminal to PDV needs `manage_woocommerce` and a nonce.

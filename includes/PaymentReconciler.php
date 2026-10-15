@@ -72,6 +72,10 @@ class PaymentReconciler {
 		if ( null === $attempt ) { $errors[] = 'order is not known for this order'; }
 		if ( isset( $mp_order['type'] ) && 'point' !== $mp_order['type'] ) { $errors[] = 'order type is not point'; }
 		if ( isset( $mp_order['transactions']['payments'][0]['amount'] ) && ! Money::equals( $mp_order['transactions']['payments'][0]['amount'], $order->get_total() ) ) { $errors[] = 'amount mismatch'; }
+		// The order response carries a `currency` field (undocumented; `CLP` seen live). The amount is sent
+		// without a currency and Mercado Pago charges in the account's currency, so a shop priced in
+		// another currency would otherwise complete on a matching number of the wrong units.
+		if ( ! empty( $mp_order['currency'] ) && strtoupper( (string) $mp_order['currency'] ) !== strtoupper( (string) $order->get_currency() ) ) { $errors[] = 'currency mismatch'; }
 		if ( 'processed' === PaymentAttempt::status( $mp_order ) ) {
 			if ( ! isset( $mp_order['transactions']['payments'][0]['amount'] ) || '' === $mp_order['transactions']['payments'][0]['amount'] ) { $errors[] = 'payment amount missing'; }
 			if ( ! isset( $mp_order['transactions']['payments'][0]['id'] ) || '' === $mp_order['transactions']['payments'][0]['id'] ) { $errors[] = 'payment id missing'; }

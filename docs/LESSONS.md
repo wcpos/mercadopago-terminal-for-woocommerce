@@ -46,7 +46,7 @@ Status: ✅ in the code · 🔧 added in the lessons pass (#10 sweep and robustn
 | L21 | Amount taken from the client | ✅ | The amount is always computed from `$order->get_total()` on the server |
 | L22 | Wrong currency exponent | ✅ | `Money::to_amount()` sends whole units when the store's price decimals are 0, two decimals otherwise. Verified live on a CLP account on 2026-10-15: `"100.00"` was refused with `property_value` ("does not match pattern"), `"100"` created the order. A fractional amount in a whole-unit store is never rounded |
 | L23 | An unknown account attribute blocked payments | ➖ | No account lookup gates payments |
-| L24 | Verify amount and currency before completing | ✅ ⏳ | The amount is verified. The live order response carries undocumented `currency` (`CLP`) and `country_code` (`CHL`) fields |
+| L24 | Verify amount and currency before completing | ✅ | The amount is verified. The live order response carries undocumented `currency` (`CLP`) and `country_code` (`CHL`) fields (2026-10-15); when `currency` is present it must equal the WooCommerce order's currency or the order is not completed |
 | L25 | An on-terminal tip changed the charged amount | ⏳ | Amount above total is treated as a mismatch (note, no completion). Whether Point Smart adds tips or interest in PDV mode is unconfirmed |
 
 ## E. Polling, timeouts, cancel and stuck payments
@@ -142,7 +142,7 @@ Paul: "plenty of logging … collect all the information the first time so we ca
 
 ## Still to verify with an account or a terminal
 
-L24, L25, L36 and L48 above, plus two things the docs did not settle:
+L25, L36 and L48 above, plus two things the docs did not settle:
 - the webhook signature manifest for Point orders (a rejected webhook now logs the exact manifest we computed);
 - whether the sandbox virtual terminal is listed by `/terminals/v1/list`.
 
