@@ -22,3 +22,4 @@ All notable changes to Mercado Pago Terminal for WooCommerce will be documented 
 ### Fixed
 
 - The log's environment line and the support bundle now report the WooCommerce POS version. They looked for a global `WCPOS_VERSION` constant that the POS plugin never defines, so they always said `n/a`.
+- API error messages now include Mercado Pago's `details`, so a rejected order says which field was refused (for example "Invalid value for property ('$.transactions.payments[0].amount' - does not match pattern)").

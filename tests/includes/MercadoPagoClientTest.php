@@ -128,8 +128,30 @@ class MercadoPagoClientTest extends TestCase {
 		} catch ( MercadoPagoApiException $error ) {
 			$this->assertSame( 400, $error->http_status() );
 			$this->assertSame( 'invalid_status_transition', $error->error_code() );
-			$this->assertSame( 'The order cannot be canceled in its current status.', $error->getMessage() );
+			$this->assertSame( 'The order cannot be canceled in its current status (status: at_terminal)', $error->getMessage() );
 			$this->assertSame( json_decode( $this->fixture( 'error-400' ), true ), $error->body() );
+		}
+	}
+
+	public function test_api_error_message_includes_validation_details(): void {
+		// Verbatim from a production rejection of a $1 Point order on 2026-10-15.
+		$this->queue_response( 400, '{"errors":[{"code":"property_value","message":"Invalid value for property","details":["\'$.transactions.payments[0].amount\' - does not match pattern"]}]}' );
+		try {
+			( new MercadoPagoClient( 'TEST-token' ) )->get_order( self::ORDER_ID );
+			$this->fail( 'Expected an API exception.' );
+		} catch ( MercadoPagoApiException $error ) {
+			$this->assertSame( 'property_value', $error->error_code() );
+			$this->assertSame( "Invalid value for property ('$.transactions.payments[0].amount' - does not match pattern)", $error->getMessage() );
+		}
+	}
+
+	public function test_api_error_message_includes_object_details(): void {
+		$this->queue_response( 400, '{"errors":[{"code":"property_value","message":"Invalid value for property","details":[{"code":"x","message":"first"},{"message":"second"},"",7]}]}' );
+		try {
+			( new MercadoPagoClient( 'TEST-token' ) )->get_order( self::ORDER_ID );
+			$this->fail( 'Expected an API exception.' );
+		} catch ( MercadoPagoApiException $error ) {
+			$this->assertSame( 'Invalid value for property (first; second)', $error->getMessage() );
 		}
 	}
 
