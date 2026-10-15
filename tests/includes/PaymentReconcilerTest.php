@@ -46,6 +46,13 @@ class PaymentReconcilerTest extends TestCase {
 		$this->assertArrayNotHasKey( self::LOCK_KEY, $GLOBALS['wpdb']->rows );
 	}
 
+	public function test_matching_currency_completes(): void {
+		$mp_order = $this->fixture( 'order-processed' );
+		$mp_order['currency'] = 'mxn';
+		$this->assertSame( array( 'status' => 'paid' ), $this->reconciler->reconcile( $this->order, $mp_order, 'poll' ) );
+		$this->assertTrue( $this->order->is_paid() );
+	}
+
 	public function test_processing_same_order_twice_completes_exactly_once_without_another_note(): void {
 		$mp_order = $this->fixture( 'order-processed' );
 		$this->reconciler->reconcile( $this->order, $mp_order, 'poll' );
@@ -74,6 +81,7 @@ class PaymentReconcilerTest extends TestCase {
 			'unknown order and reference' => array( array( 'id' => 'ORD-UNKNOWN', 'external_reference' => 'wcpos-123-deadbeef' ), 'order is not known for this order' ),
 			'terminal' => array( array( 'config' => array( 'point' => array( 'terminal_id' => 'OTHER-TERMINAL' ) ) ), 'terminal mismatch' ),
 			'type' => array( array( 'type' => 'online' ), 'order type is not point' ),
+			'currency' => array( array( 'currency' => 'CLP' ), 'currency mismatch' ),
 		);
 	}
 
