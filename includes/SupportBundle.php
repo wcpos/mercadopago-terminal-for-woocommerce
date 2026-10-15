@@ -70,7 +70,7 @@ class SupportBundle {
 			$lines[] = 'WordPress: ' . ( $GLOBALS['wp_version'] ?? 'unknown' );
 			$lines[] = 'WooCommerce: ' . ( defined( 'WC_VERSION' ) ? WC_VERSION : 'unknown' );
 			$lines[] = 'PHP: ' . PHP_VERSION;
-			$lines[] = 'WCPOS: ' . ( defined( 'WCPOS_VERSION' ) ? WCPOS_VERSION : 'unknown' );
+			$lines[] = 'WCPOS: ' . Logger::wcpos_version( 'unknown' );
 			$lines[] = 'Site URL: ' . home_url();
 			$lines[] = 'Timezone: ' . ( function_exists( 'wp_timezone_string' ) ? wp_timezone_string() : 'unknown' );
 			$lines[] = 'HPOS enabled: ' . ( class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' ) ? ( \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled() ? 'yes' : 'no' ) : 'unknown' );
