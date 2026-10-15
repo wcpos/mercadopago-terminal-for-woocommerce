@@ -19,6 +19,22 @@ class MoneyTest extends TestCase {
 		);
 	}
 
+	protected function tearDown(): void { WP_Stub::$price_decimals = 2; }
+
+	/** A store that prices in whole units sends whole units; see Money::to_amount(). */
+	public function test_to_amount_sends_whole_units_for_a_zero_decimal_store(): void {
+		WP_Stub::$price_decimals = 0;
+		$this->assertSame( 0, Money::decimals() );
+		$this->assertSame( '100', Money::to_amount( '100.00' ) );
+		$this->assertSame( '1', Money::to_amount( 1 ) );
+		// A fractional amount is never rounded away; it keeps its decimals and the API refuses it.
+		$this->assertSame( '1234.50', Money::to_amount( '1234.50' ) );
+		$this->assertSame( '0', Money::to_amount( '0' ) );
+		WP_Stub::$price_decimals = 1;
+		$this->assertSame( 2, Money::decimals() );
+		$this->assertSame( '100.50', Money::to_amount( '100.5' ) );
+	}
+
 	public function test_to_cents_and_equals(): void {
 		$this->assertSame( 1999, Money::to_cents( '19.99' ) );
 		$this->assertSame( 11, Money::to_cents( 0.105 ) );

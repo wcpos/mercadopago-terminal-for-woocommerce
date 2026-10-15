@@ -44,9 +44,9 @@ Status: ✅ in the code · 🔧 added in the lessons pass (#10 sweep and robustn
 | # | Lesson | Status | Where |
 |---|---|---|---|
 | L21 | Amount taken from the client | ✅ | The amount is always computed from `$order->get_total()` on the server |
-| L22 | Wrong currency exponent | ✅ ⏳ | Amounts are 2-decimal strings, as documented (`Money`). How Mercado Pago wants CLP/COP is unconfirmed; check it in the sandbox |
+| L22 | Wrong currency exponent | ✅ | `Money::to_amount()` sends whole units when the store's price decimals are 0, two decimals otherwise. Verified live on a CLP account on 2026-10-15: `"100.00"` was refused with `property_value` ("does not match pattern"), `"100"` created the order. A fractional amount in a whole-unit store is never rounded |
 | L23 | An unknown account attribute blocked payments | ➖ | No account lookup gates payments |
-| L24 | Verify amount and currency before completing | ✅ ⏳ | The amount is verified. The Point order has no documented currency field, so currency is implied by the seller's site; check it in the sandbox |
+| L24 | Verify amount and currency before completing | ✅ ⏳ | The amount is verified. The live order response carries undocumented `currency` (`CLP`) and `country_code` (`CHL`) fields |
 | L25 | An on-terminal tip changed the charged amount | ⏳ | Amount above total is treated as a mismatch (note, no completion). Whether Point Smart adds tips or interest in PDV mode is unconfirmed |
 
 ## E. Polling, timeouts, cancel and stuck payments
@@ -142,7 +142,8 @@ Paul: "plenty of logging … collect all the information the first time so we ca
 
 ## Still to verify with an account or a terminal
 
-L22, L24, L25, L36 and L48 above, plus three things the docs did not settle:
+L24, L25, L36 and L48 above, plus two things the docs did not settle:
 - the webhook signature manifest for Point orders (a rejected webhook now logs the exact manifest we computed);
-- Mercado Pago's response field names;
 - whether the sandbox virtual terminal is listed by `/terminals/v1/list`.
+
+Settled live on a CLP account on 2026-10-15: the PDV switch (`PATCH /terminals/v1/setup`), order creation, polling, API cancel (`status_detail: canceled_by_api`) and the response field names (`id`, `status`, `status_detail`, `currency`, `country_code`, `transactions.payments[].id/amount/status/status_detail`).

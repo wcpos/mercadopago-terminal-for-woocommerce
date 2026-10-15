@@ -26,9 +26,23 @@ class PaymentAttempt {
 		);
 	}
 
+	private static function same_amount( $a, string $b ): bool {
+		return is_numeric( $a ) && is_numeric( $b ) && Utils\Money::equals( $a, $b );
+	}
+
 	public static function prepare( $order, string $terminal_id, string $amount ): array {
 		$pending = $order->get_meta( self::META_PENDING_CREATE );
-		if ( is_array( $pending ) && ( $pending['terminal_id'] ?? '' ) === $terminal_id && ( $pending['amount'] ?? '' ) === $amount && time() - strtotime( $pending['created_at'] ?? '' ) < self::PENDING_REUSE_SECONDS ) {
+		// Compare the amount numerically: a pending record saved before the
+		// amount format changed ("100.00" vs "100") is the same attempt and must
+		// keep its idempotency key. The stored string is refreshed so the retry
+		// sends the current format; Mercado Pago answers 409 if that key already
+		// created an order with a different body, which is exactly the guard we want.
+		if ( is_array( $pending ) && ( $pending['terminal_id'] ?? '' ) === $terminal_id && self::same_amount( $pending['amount'] ?? '', $amount ) && time() - strtotime( $pending['created_at'] ?? '' ) < self::PENDING_REUSE_SECONDS ) {
+			if ( $pending['amount'] !== $amount ) {
+				$pending['amount'] = $amount;
+				$order->update_meta_data( self::META_PENDING_CREATE, $pending );
+				$order->save();
+			}
 			Logger::log( 'Payment attempt reused after an earlier failed create', array( 'order_id' => $order->get_id() ) + $pending, 'info' );
 			return $pending;
 		}

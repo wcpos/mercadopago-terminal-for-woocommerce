@@ -22,6 +22,7 @@ class WP_Stub {
 	public static $notices = array();
 	public static $cron = array();
 	public static $logged_in = false;
+	public static $price_decimals = 2;
 
 	public static function reset(): void {
 		self::$options = array();
@@ -38,6 +39,7 @@ class WP_Stub {
 		self::$nonce_ok = false;
 		self::$json = null;
 		self::$transients = array();
+		self::$price_decimals = 2;
 		self::$transient_expirations = array();
 		self::$is_admin = false;
 		self::$scripts = array();
@@ -171,6 +173,7 @@ if ( ! class_exists( 'WP_Error' ) ) {
 		public function get_error_message() { return $this->message; }
 	}
 }
+if ( ! function_exists( 'wc_get_price_decimals' ) ) { function wc_get_price_decimals() { return WP_Stub::$price_decimals; } }
 if ( ! function_exists( 'wc_format_decimal' ) ) { function wc_format_decimal( $number, $dp = false ) { return number_format( (float) $number, false === $dp ? 2 : $dp, '.', '' ); } }
 if ( ! function_exists( 'is_wp_error' ) ) { function is_wp_error( $value ) { return $value instanceof WP_Error; } }
 if ( ! function_exists( 'wp_remote_request' ) ) {
