@@ -5,8 +5,8 @@ use WCPOS\WooCommercePOS\MercadoPagoTerminal\Gateway;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\PaymentAttempt;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\Settings;
 
-if ( ! function_exists( 'woocommerce_pos_request' ) ) {
-	function woocommerce_pos_request( ?bool $value = null ): bool {
+if ( ! function_exists( 'wcpos_request' ) ) {
+	function wcpos_request( ?bool $value = null ): bool {
 		static $is_pos = false;
 		if ( null !== $value ) {
 			$is_pos = $value;
@@ -30,7 +30,7 @@ class GatewayTest extends TestCase {
 	protected function tearDown(): void {
 		$_GET = array();
 		$_POST = array();
-		woocommerce_pos_request( false );
+		wcpos_request( false );
 		unset( $GLOBALS['mptfwc_orders'], $GLOBALS['wp'] );
 		WP_Stub::reset();
 	}
@@ -332,7 +332,7 @@ class GatewayTest extends TestCase {
 
 	public function test_pos_unpaid_order_polls_and_notices(): void {
 		$GLOBALS['wp']->query_vars = array();
-		woocommerce_pos_request( true );
+		wcpos_request( true );
 		WP_Stub::$options[ 'woocommerce_' . Settings::GATEWAY_ID . '_settings' ] = array( 'access_token' => 'TEST-token' );
 		$pending = PaymentAttempt::prepare( $this->order, 'T1', '24.00' );
 		$remote = array( 'id' => 'ORD1', 'status' => 'created', 'external_reference' => $pending['external_reference'] );

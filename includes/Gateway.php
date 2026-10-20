@@ -309,7 +309,7 @@ class Gateway extends WC_Payment_Gateway {
 			}
 		}
 
-		$is_pos = function_exists( 'woocommerce_pos_request' ) && woocommerce_pos_request();
+		$is_pos = function_exists( 'wcpos_request' ) && wcpos_request();
 		$locked = $settings->lock_terminal();
 		echo '<div id="mptfwc-payment-interface" class="mptfwc-payment-interface" data-order-id="' . esc_attr( $order_id ) . '" data-order-token="' . esc_attr( $order_token ) . '" data-default-terminal-id="' . esc_attr( $settings->default_terminal_id() ) . '" data-pos="' . ( $is_pos ? '1' : '0' ) . '" data-lock-terminal="' . ( $locked ? '1' : '0' ) . '" data-resume="' . ( $resume ? '1' : '0' ) . '" data-gateway-id="' . esc_attr( Settings::GATEWAY_ID ) . '">';
 		echo '<div class="mptfwc-payment-card">';
@@ -463,7 +463,7 @@ class Gateway extends WC_Payment_Gateway {
 	}
 
 	private function is_storefront_checkout(): bool {
-		return ! ( function_exists( 'woocommerce_pos_request' ) && woocommerce_pos_request() )
+		return ! ( function_exists( 'wcpos_request' ) && wcpos_request() )
 			&& ! ( function_exists( 'is_checkout_pay_page' ) && is_checkout_pay_page() )
 			&& ( ! isset( $GLOBALS['wp'] ) || empty( $GLOBALS['wp']->query_vars['order-pay'] ) )
 			&& ! array_key_exists( 'woocommerce_pay', $_POST );
