@@ -4,6 +4,7 @@ use WCPOS\WooCommercePOS\MercadoPagoTerminal\Provider_Adapter;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\Settings;
 use WCPOS\WooCommercePOS\MercadoPagoTerminal\Tests\Conformance\Mercado_Pago_Conformance_Fixture as Transport;
 use WCPOS\WooCommercePOS\Payments\Contract\Ledger;
+use WCPOS\WooCommercePOS\Payments\Contract\Ledger_Draft;
 require_once __DIR__ . '/Conformance/Mercado_Pago_Conformance_Fixture.php';
 class Test_Provider_Adapter extends \WP_UnitTestCase {
 	protected $transport;
@@ -75,12 +76,12 @@ class Test_Provider_Adapter extends \WP_UnitTestCase {
 		$row = wcpos_pro_adopt_legacy_attempt( $order, Settings::GATEWAY_ID, $row['provider_refs']['action'], '24.00', 'EUR' );
 		$row['created_at_gmt'] = gmdate( 'c', time() - 120 );
 		$row['expires_at'] = gmdate( 'c', time() + 300 );
-		Ledger::instance()->save( $order, array( $row ), false );
+		Ledger::instance()->write( $order, static function ( Ledger_Draft $draft ) use ( $row ): void { $draft->put( $row ); }, Ledger::MODE_HOLD ); // Free deleted save(): every row write is write().
 		$this->transport->response_override = Transport::response( array(), 404 );
 		$this->assertSame( 'pending', ( new Provider_Adapter() )->fetch( $row['provider_refs']['action'] )['status'] );
 		$row['created_at_gmt'] = gmdate( 'c' );
 		$row['expires_at'] = gmdate( 'c', time() - 1 );
-		Ledger::instance()->save( $order, array( $row ), false );
+		Ledger::instance()->write( $order, static function ( Ledger_Draft $draft ) use ( $row ): void { $draft->put( $row ); }, Ledger::MODE_HOLD ); // Free deleted save(): every row write is write().
 		$this->assertSame( array( 'status' => 'failed', 'failure_reason' => 'expired' ), $this->adapter->fetch( $row['provider_refs']['action'] ) );
 	}
 	/** @dataProvider errors */
