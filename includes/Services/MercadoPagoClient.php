@@ -81,6 +81,20 @@ class MercadoPagoClient {
 			$data = is_array( $data ) ? $data : array();
 			$message = $data['errors'][0]['message'] ?? $data['message'] ?? $data['error'] ?? 'Mercado Pago API error.';
 			$code    = $data['errors'][0]['code'] ?? $data['error'] ?? '';
+			// Orders API validation errors carry the offending field only in
+			// `details`, e.g. "'$.transactions.payments[0].amount' - does not match
+			// pattern"; without it the cashier sees a bare "Invalid value for property".
+			$details = array();
+			foreach ( (array) ( $data['errors'][0]['details'] ?? array() ) as $detail ) {
+				if ( is_string( $detail ) && '' !== $detail ) {
+					$details[] = $detail;
+				} elseif ( is_array( $detail ) && ! empty( $detail['message'] ) ) {
+					$details[] = (string) $detail['message'];
+				}
+			}
+			if ( $details ) {
+				$message = rtrim( $message, '. ' ) . ' (' . implode( '; ', $details ) . ')';
+			}
 			throw new MercadoPagoApiException( $message, $status, $code, $data );
 		}
 		if ( ! is_array( $data ) ) {

@@ -21,9 +21,8 @@ class Settings {
 	public function access_token(): string { return trim( (string) $this->get( 'access_token', '' ) ); }
 	public function webhook_secret(): string { return trim( (string) $this->get( 'webhook_secret', '' ) ); }
 	public function enabled_for_pos(): bool {
-		$getter = function_exists( 'wcpos_get_settings' ) ? 'wcpos_get_settings' : 'woocommerce_pos_get_settings';
-		if ( ! function_exists( $getter ) ) { return false; }
-		$settings = $getter( 'payment_gateways' );
+		if ( ! function_exists( 'wcpos_get_settings' ) ) { return false; }
+		$settings = wcpos_get_settings( 'payment_gateways' );
 		return is_array( $settings ) && ! empty( $settings['gateways'][ self::GATEWAY_ID ]['enabled'] );
 	}
 
