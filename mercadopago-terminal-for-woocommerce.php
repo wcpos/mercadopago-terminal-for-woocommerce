@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Mercado Pago Terminal for WooCommerce
  * Description: Adds Mercado Pago Point Smart terminal support to WooCommerce for in-person payments. Requires WooCommerce POS Pro 2.0.
- * Version:     1.0.0
+ * Version:     1.0.0-beta1
  * Author:      kilbot
  * Author URI:  https://kilbot.com/
  * Update URI:  https://github.com/wcpos/mercadopago-terminal-for-woocommerce
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'MPTFWC_VERSION', '1.0.0' );
+define( 'MPTFWC_VERSION', '1.0.0-beta1' );
 define( 'MPTFWC_PLUGIN_FILE', __FILE__ );
 define( 'MPTFWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MPTFWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
