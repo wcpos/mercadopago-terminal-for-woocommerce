@@ -12,7 +12,8 @@ This is the `next` / 2.0 integration. The `main` / 0.x line is separate. This re
    `https://your-store.example/wp-json/wcpos/v2/payments/webhook?provider=mercadopago`
    Paste the corresponding signature secret. **Empty secrets and invalid signatures are rejected with HTTP 401.** Polling and Pro's reconciliation do not depend on webhook delivery.
 4. Use the gateway's credential check and terminals table. For a STANDALONE terminal, select **Switch to PDV**, then restart the terminal. Only PDV terminals are available for payment.
-5. Enable the gateway in **POS settings** and configure Pro's reader selection, default reader, and allowed readers. Old extension-specific terminal settings no longer control selection.
+5. If your shop's currency has no minor unit (for example Chilean pesos), set **WooCommerce → Settings → General → Number of decimals** to **0**. Mercado Pago refuses amounts with decimals on such accounts, and amounts are sent with the store's number of decimals.
+6. Enable the gateway in **POS settings** and configure Pro's reader selection, default reader, and allowed readers. Old extension-specific terminal settings no longer control selection.
 
 ## Taking payments
 

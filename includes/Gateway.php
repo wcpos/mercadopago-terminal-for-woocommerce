@@ -26,7 +26,7 @@ class Gateway extends \WC_Payment_Gateway {
 		return '' !== $settings->access_token() && ( parent::is_available() || (
 			// A POS request, or the order-pay page for a user who may use the POS (Pro's panel gate);
 			// a customer paying an invoice must not see a terminal-only method.
-			$settings->enabled_for_pos() && ( ( function_exists( 'woocommerce_pos_request' ) && woocommerce_pos_request() ) || ( is_checkout_pay_page() && current_user_can( 'access_woocommerce_pos' ) ) )
+			$settings->enabled_for_pos() && ( ( function_exists( 'wcpos_request' ) && wcpos_request() ) || ( is_checkout_pay_page() && current_user_can( 'access_woocommerce_pos' ) ) )
 		) );
 	}
 	public function payment_fields() {

@@ -21,7 +21,7 @@ class Test_Gateway extends \WP_UnitTestCase {
 		}
 		$query_vars = $wp->query_vars;
 		$enable = static function ( $settings ) use ( $pos ) { $settings['gateways'][Settings::GATEWAY_ID]['enabled'] = $pos; return $settings; };
-		add_filter( 'woocommerce_pos_payment_gateways_settings', $enable );
+		add_filter( 'wcpos_payment_gateways_settings', $enable );
 		add_filter( 'woocommerce_is_checkout', '__return_true' );
 		try {
 			$wp->query_vars = 'pos' === $context ? array( 'wcpos' => 1 ) : ( 'order-pay' === $context ? array( 'order-pay' => 123 ) : array() );
@@ -33,7 +33,7 @@ class Test_Gateway extends \WP_UnitTestCase {
 		} finally {
 			$wp->query_vars = $query_vars;
 			remove_filter( 'woocommerce_is_checkout', '__return_true' );
-			remove_filter( 'woocommerce_pos_payment_gateways_settings', $enable );
+			remove_filter( 'wcpos_payment_gateways_settings', $enable );
 		}
 	}
 	public static function availability_cases(): array {
@@ -72,7 +72,7 @@ class Test_Gateway extends \WP_UnitTestCase {
 		global $wp;
 		$gateway = new Gateway(); $order = wc_create_order(); $order->set_total( '24.00' ); $order->save();
 		$enable = static function ( $settings ) { $settings['gateways'][Settings::GATEWAY_ID]['enabled'] = true; return $settings; };
-		add_filter( 'woocommerce_pos_payment_gateways_settings', $enable );
+		add_filter( 'wcpos_payment_gateways_settings', $enable );
 		add_filter( 'woocommerce_is_checkout', '__return_true' );
 		$wp->query_vars['order-pay'] = $order->get_id();
 		$user = self::factory()->user->create( array( 'role' => 'administrator' ) );
@@ -82,7 +82,7 @@ class Test_Gateway extends \WP_UnitTestCase {
 		wp_set_current_user( 0 ); ob_start(); $gateway->payment_fields(); $html = ob_get_clean();
 		$this->assertStringNotContainsString( 'wcpos-pro-order-pay', $html );
 		remove_filter( 'woocommerce_is_checkout', '__return_true' );
-		remove_filter( 'woocommerce_pos_payment_gateways_settings', $enable ); unset( $wp->query_vars['order-pay'] );
+		remove_filter( 'wcpos_payment_gateways_settings', $enable ); unset( $wp->query_vars['order-pay'] );
 	}
 	public function test_admin_pdv_link_and_no_private_support_bundle(): void {
 		ob_start(); ( new Gateway() )->admin_options(); $html = ob_get_clean();
