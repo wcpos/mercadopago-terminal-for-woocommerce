@@ -6,7 +6,7 @@ All notable changes to Mercado Pago Terminal for WooCommerce will be documented 
 
 First beta of 1.0.0, for the WCPOS 2.0 beta. The extension now runs on WCPOS Pro 2.0's shared payments base and requires WCPOS Pro 2.0.0 or later. The changes are listed under 1.0.0 below.
 
-## 1.0.0 - Unreleased
+## 1.0.0
 
 ### Changed
 
@@ -16,7 +16,7 @@ First beta of 1.0.0, for the WCPOS 2.0 beta. The extension now runs on WCPOS Pro
 - Preserves MP order IDs as transaction references for historical full/partial refunds.
 - Rejects unsigned webhooks and missing secrets; use `/wp-json/wcpos/v2/payments/webhook?provider=mercadopago`.
 - Removes private payment AJAX, scripts, locks, sweepers, logs, support downloads, reader controls, and the `mptfwc_order_payload` filter. External refunds require merchant reconciliation.
-- Replaces stub tests with WordPress integration/conformance tests and reviewed golden transcripts; CI runs against sibling Pro `next`.
+- Replaces stub tests with WordPress integration/conformance tests and reviewed golden transcripts; CI runs against sibling Pro `main`.
 
 ### Verification limits
 
