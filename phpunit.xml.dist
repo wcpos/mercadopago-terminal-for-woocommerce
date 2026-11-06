@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <phpunit bootstrap="tests/bootstrap.php" colors="true" cacheResult="false">
 	<testsuites>
-		<testsuite name="unit"><directory>tests/includes</directory></testsuite>
+		<testsuite name="unit"><directory prefix="Test_" suffix=".php">tests/includes</directory></testsuite>
 	</testsuites>
 </phpunit>
