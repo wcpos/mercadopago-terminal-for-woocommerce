@@ -55,7 +55,7 @@ No seller sandbox account or physical Point terminal was exercised for this rele
 
 ## Development
 
-The WordPress tests require a composer-installed Pro `next` checkout at `../woocommerce-pos-pro`, with Free vendored by Pro. `.wp-env.json` mounts WooCommerce, Pro, and this extension. From a running environment, derive the mounted extension directory from the checkout name with `$(basename "$PWD")` (as the package scripts do). The default checkout name is `mercadopago-terminal-for-woocommerce`:
+The WordPress tests require a composer-installed Pro `main` checkout at `../woocommerce-pos-pro`, with Free vendored by Pro. `.wp-env.json` mounts WooCommerce, Pro, and this extension. From a running environment, derive the mounted extension directory from the checkout name with `$(basename "$PWD")` (as the package scripts do). The default checkout name is `mercadopago-terminal-for-woocommerce`:
 
 ```sh
 npx wp-env run --env-cwd="wp-content/plugins/$(basename "$PWD")" tests-cli -- vendor/bin/phpunit -c phpunit.xml.dist --filter 'Tests\\Conformance\\'
