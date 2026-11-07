@@ -22,6 +22,9 @@ class Legacy_Adoption {
 			} );
 			if ( is_wp_error( $result ) ) {
 				wc_get_logger()->error( 'Legacy Mercado Pago adoption failed for order ' . $order->get_id() . ': ' . $result->get_error_code(), array( 'source' => 'mercadopago-terminal' ) );
+				// A held lock clears, so stop before the offset moves and rerun this page next init;
+				// any other refusal is final for the order and must not wedge the upgrade.
+				if ( 'wcpos_payment_locked' === $result->get_error_code() ) { return; }
 				continue;
 			}
 			++$count;
