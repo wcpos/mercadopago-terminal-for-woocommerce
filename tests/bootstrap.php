@@ -1,9 +1,9 @@
 <?php
-define( 'ABSPATH', dirname( __DIR__ ) . '/' );
-require_once dirname( __DIR__ ) . '/vendor/autoload.php';
-require_once __DIR__ . '/stubs/wordpress.php';
-require_once __DIR__ . '/stubs/woocommerce.php';
-require_once __DIR__ . '/support/FakeMercadoPagoClient.php';
-require_once dirname( __DIR__ ) . '/mercadopago-terminal-for-woocommerce.php';
-
-WP_Stub::$boot_actions = WP_Stub::$actions;
+$tests_dir = getenv( 'WP_TESTS_DIR' ) ?: getenv( 'WP_PHPUNIT__DIR' ) ?: '/tmp/wordpress-tests-lib';
+require_once $tests_dir . '/includes/functions.php';
+tests_add_filter( 'muplugins_loaded', static function () {
+	require dirname( __DIR__ ) . '/mercadopago-terminal-for-woocommerce.php';
+}, 11 );
+require dirname( __DIR__ ) . '/../woocommerce-pos-pro/tests/bootstrap.php';
+require_once dirname( __DIR__ ) . '/../woocommerce-pos-pro/tests/includes/Conformance/Conformance_Fixture.php';
+require_once dirname( __DIR__ ) . '/../woocommerce-pos-pro/tests/includes/Conformance/Provider_Conformance_Test_Case.php';
