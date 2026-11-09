@@ -13,6 +13,7 @@ First beta of 1.0.0, for the WCPOS 2.0 beta. The extension now runs on WCPOS Pro
 - Requires WooCommerce POS Pro 2.0, WordPress 6.0, and PHP 7.4. WooCommerce is the only WordPress plugin-header dependency.
 - Uses Pro's server provider boundary, order-pay panel, reader curation, ledger settlement, reconciliation, refund binding, redaction, and support bundle.
 - Adopts live 0.x attempts once, leaves old metadata in place, and clears the old cron hook.
+- An order locked by a till during the upgrade is retried on the next page load instead of skipped, so its pending attempt is still adopted.
 - Preserves MP order IDs as transaction references for historical full/partial refunds.
 - Rejects unsigned webhooks and missing secrets; use `/wp-json/wcpos/v2/payments/webhook?provider=mercadopago`.
 - Removes private payment AJAX, scripts, locks, sweepers, logs, support downloads, reader controls, and the `mptfwc_order_payload` filter. External refunds require merchant reconciliation.

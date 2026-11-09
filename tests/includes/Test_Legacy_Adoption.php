@@ -42,7 +42,7 @@ class Test_Legacy_Adoption extends \WP_UnitTestCase {
 		} finally { $transport->uninstall(); }
 	}
 	/** @dataProvider order_stores */
-	public function test_thirty_legacy_orders_finish_in_two_init_pages_and_skip_logged_error( bool $hpos ): void {
+	public function test_thirty_legacy_orders_hold_page_on_busy_lock_then_all_adopt( bool $hpos ): void {
 		update_option( 'woocommerce_custom_orders_table_enabled', $hpos ? 'yes' : 'no' );
 		$transport = new Transport(); $transport->install();
 		$orders = array();
@@ -70,17 +70,15 @@ class Test_Legacy_Adoption extends \WP_UnitTestCase {
 			\WCPOS\WooCommercePOS\MercadoPagoTerminal\init();
 			$this->assertSame( 20, has_action( 'init', array( Legacy_Adoption::class, 'upgrade' ) ) );
 			do_action( 'init' );
-			$this->assertSame( 25, get_option( 'mptfwc_adoption_offset' ) );
+			// A busy lock clears, so the page is held for the next init rather than skipped.
+			$this->assertSame( 0, (int) get_option( 'mptfwc_adoption_offset', 0 ) );
 			$this->assertSame( '0.1.0', get_option( 'mptfwc_version' ) );
 			$this->assertCount( 0, Ledger::instance()->read( wc_get_order( $orders[0]->get_id() ) ) );
-			$adopted = 0;
-			foreach ( $orders as $order ) { $adopted += count( Ledger::instance()->read( wc_get_order( $order->get_id() ) ) ); }
-			$this->assertSame( 24, $adopted );
 			$lock->release( $orders[0]->get_id() );
-			do_action( 'init' );
+			for ( $calls = 0; $calls < 4 && '1.0.0' !== get_option( 'mptfwc_version' ); ++$calls ) { do_action( 'init' ); }
 			$this->assertFalse( get_option( 'mptfwc_adoption_offset' ) );
 			$this->assertSame( '1.0.0', get_option( 'mptfwc_version' ) );
-			foreach ( $orders as $i => $order ) { $this->assertCount( 0 === $i ? 0 : 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) ); }
+			foreach ( $orders as $order ) { $this->assertCount( 1, Ledger::instance()->read( wc_get_order( $order->get_id() ) ) ); }
 			$this->assertSame( array(), $transport->transcript() );
 		} finally {
 			$lock->release( $orders[0]->get_id() );
